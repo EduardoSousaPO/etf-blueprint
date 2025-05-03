@@ -32,6 +32,46 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# Esconder o menu do Streamlit e o rodapé "Made with Streamlit"
+hide_menu_style = """
+    <style>
+        #MainMenu {visibility: hidden;}
+        footer {visibility: hidden;}
+        .stDeployButton {display:none;}
+        header {visibility: hidden;}
+        
+        /* Design responsivo para mobile */
+        @media (max-width: 768px) {
+            .stApp {
+                padding-top: 10px;
+            }
+            .stButton button {
+                width: 100%;
+                margin-bottom: 10px;
+            }
+        }
+        
+        /* Melhorar a aparência da barra de navegação no sidebar */
+        .stRadio > div {
+            padding: 10px;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+        .stRadio > div:hover {
+            background-color: #F8F9FE;
+        }
+        .stSidebar .stRadio [role=radiogroup] {
+            gap: 10px;
+        }
+        .stSidebar .stRadio [data-testid=stMarkdownContainer] > p {
+            font-size: 1.05rem !important;
+            font-weight: 600 !important;
+            padding-left: 10px;
+        }
+    </style>
+    """
+st.markdown(hide_menu_style, unsafe_allow_html=True)
+
 # Inicializa o session_state para navegação, se necessário
 if 'nav' not in st.session_state:
     st.session_state.nav = "Home"
@@ -48,6 +88,14 @@ if "page" in st.query_params:
 
 # Sidebar para navegação
 st.sidebar.title("ETF Blueprint")
+st.sidebar.markdown("""
+<div style="margin-bottom: 20px; border-radius: 8px; padding: 10px; background-color: #F8F9FE;">
+    <p style="margin: 0; font-size: 0.9rem; color: #4F5665;">
+        Otimização de carteiras de ETFs com algoritmos avançados
+    </p>
+</div>
+""", unsafe_allow_html=True)
+
 opcao = st.sidebar.radio(
     "Navegação",
     ["Home", "Perfil de Risco", "Resultados"],

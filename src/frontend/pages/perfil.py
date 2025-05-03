@@ -3,150 +3,327 @@ import pandas as pd
 from datetime import datetime
 import json
 import os
+import asyncio
 
 def show():
     """
-    Renderiza a página de perfil de risco do usuário
+    Renderiza a página de perfil de risco do investidor
     """
-    st.title("Perfil de Risco")
-    
+    # Estilos personalizados
     st.markdown("""
-    Vamos entender seu perfil de investidor para criar uma carteira personalizada.
-    Preencha as informações abaixo com cuidado para obter os melhores resultados.
-    """)
+    <style>
+        /* Estilo geral */
+        .profile-page {
+            padding: 1rem 0;
+        }
+        
+        /* Card de formulário */
+        .form-card {
+            background-color: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06);
+            margin-bottom: 20px;
+        }
+        
+        /* Títulos de seção */
+        .section-title {
+            position: relative;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+            font-weight: 600;
+            color: #121A3E;
+        }
+        .section-title:after {
+            content: "";
+            position: absolute;
+            left: 0;
+            bottom: 0;
+            width: 50px;
+            height: 3px;
+            background-color: #4361EE;
+        }
+        
+        /* Progress bar */
+        .stProgress .st-bo {
+            background-color: #4361EE !important;
+        }
+        
+        /* Destaque para objetivos */
+        .goal-selector {
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+            transition: all 0.3s;
+            border: 2px solid transparent;
+        }
+        .goal-selector:hover {
+            border-color: #e0e0ef;
+            background-color: #f8f9fe;
+        }
+        .goal-title {
+            font-weight: 600;
+            color: #121A3E;
+            margin-bottom: 5px;
+        }
+        .goal-description {
+            font-size: 0.9rem;
+            color: #4F5665;
+        }
+        
+        /* Range slider personalizado */
+        .custom-slider {
+            background-color: #f8f9fe;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 15px 0;
+        }
+        .slider-label {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 10px;
+        }
+        .slider-min, .slider-max {
+            font-size: 0.85rem;
+            color: #4F5665;
+        }
+    </style>
+    """, unsafe_allow_html=True)
     
-    # Formulário de perfil
-    with st.form("perfil_form"):
-        # Informações básicas
-        st.subheader("Informações básicas")
+    st.markdown('<div class="profile-page">', unsafe_allow_html=True)
+    st.title("Seu Perfil de Investimento")
+    
+    # Formulário para capturar dados do perfil
+    with st.form("form_perfil"):
+        st.markdown('<div class="form-card">', unsafe_allow_html=True)
+        st.markdown('<h2 class="section-title">Objetivos Financeiros</h2>', unsafe_allow_html=True)
+        
+        # Horizonte de investimento
+        st.markdown("**Qual é o seu horizonte de investimento?**")
+        horizonte = st.radio(
+            label="Horizonte",
+            options=["Curto prazo (1-2 anos)", "Médio prazo (3-5 anos)", "Longo prazo (6+ anos)"],
+            label_visibility="collapsed"
+        )
+        
+        # Objetivo principal
+        st.markdown("**Qual é o seu objetivo principal?**")
+        
         col1, col2 = st.columns(2)
         
         with col1:
-            nome = st.text_input("Nome", placeholder="Seu nome completo")
+            st.markdown("""
+            <div class="goal-selector">
+                <div class="goal-title">Preservação de Capital</div>
+                <div class="goal-description">Proteger o patrimônio, com foco em segurança e baixa volatilidade</div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            st.markdown("""
+            <div class="goal-selector">
+                <div class="goal-title">Crescimento Moderado</div>
+                <div class="goal-description">Crescimento equilibrado, com riscos controlados</div>
+            </div>
+            """, unsafe_allow_html=True)
         
         with col2:
-            email = st.text_input("Email", placeholder="seu@email.com")
+            st.markdown("""
+            <div class="goal-selector">
+                <div class="goal-title">Crescimento Agressivo</div>
+                <div class="goal-description">Maximizar retornos, aceitando maior volatilidade</div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            st.markdown("""
+            <div class="goal-selector">
+                <div class="goal-title">Renda Passiva</div>
+                <div class="goal-description">Geração de fluxo de caixa regular através de dividendos</div>
+            </div>
+            """, unsafe_allow_html=True)
         
-        # Horizonte de investimento
-        st.subheader("Horizonte de investimento")
-        horizonte = st.slider(
-            "Por quanto tempo você pretende manter seus investimentos?",
-            min_value=1,
-            max_value=30,
-            value=5,
-            step=1,
-            help="Selecione o número de anos"
+        objetivo = st.radio(
+            label="Objetivo",
+            options=["Preservação de Capital", "Crescimento Moderado", "Crescimento Agressivo", "Renda Passiva"],
+            label_visibility="collapsed"
         )
         
-        # Tolerância a risco
-        st.subheader("Tolerância a risco")
+        st.markdown("</div>", unsafe_allow_html=True)
         
-        tolerancia_drawdown = st.select_slider(
-            "Qual é a máxima queda (drawdown) que você aceitaria em sua carteira?",
-            options=["5%", "10%", "15%", "20%", "25%", "30%", "35%", "40%"],
-            value="15%",
-            help="Drawdown é a queda percentual máxima do valor da carteira em relação ao seu pico anterior"
+        # Perfil de risco
+        st.markdown('<div class="form-card">', unsafe_allow_html=True)
+        st.markdown('<h2 class="section-title">Perfil de Risco</h2>', unsafe_allow_html=True)
+        
+        st.markdown("**Como você reage quando seus investimentos caem significativamente?**")
+        reacao_perda = st.radio(
+            label="Reação a perdas",
+            options=[
+                "Vendo imediatamente para evitar mais perdas",
+                "Fico preocupado, mas aguardo um pouco",
+                "Mantenho a calma, pois faz parte do ciclo de investimentos",
+                "Aproveito para comprar mais, pois os preços estão mais baixos"
+            ]
         )
         
-        risco_opcoes = {
-            "Conservador": "Prefiro estabilidade e baixa volatilidade, mesmo com retornos menores",
-            "Moderado": "Busco equilíbrio entre risco e retorno",
-            "Agressivo": "Aceito maior volatilidade em busca de retornos superiores",
-            "Muito agressivo": "Foco em maximizar retornos de longo prazo, aceitando alta volatilidade"
-        }
-        
-        perfil_risco = st.radio(
-            "Como você descreveria seu perfil de risco?",
-            options=list(risco_opcoes.keys()),
-            index=1,
-            help="Esta definição ajuda a determinar a alocação entre classes de ativos"
+        st.markdown("**Qual é o seu nível de experiência com investimentos?**")
+        experiencia = st.radio(
+            label="Experiência",
+            options=[
+                "Iniciante - Estou começando a investir agora",
+                "Intermediário - Já invisto há algum tempo",
+                "Avançado - Tenho bastante experiência com diversos ativos"
+            ]
         )
         
-        st.caption(risco_opcoes[perfil_risco])
+        # Tolerância a drawdown com slider customizado
+        st.markdown("**Qual queda máxima (drawdown) você estaria disposto a tolerar temporariamente?**")
+        st.markdown('<div class="custom-slider">', unsafe_allow_html=True)
+        tolerancia_drawdown = st.slider(
+            label="Tolerância a drawdown",
+            min_value=5,
+            max_value=40,
+            value=20,
+            step=5,
+            format="%d%%",
+            label_visibility="collapsed"
+        )
+        st.markdown("""
+        <div class="slider-label">
+            <div class="slider-min">Conservador (-5%)</div>
+            <div class="slider-max">Arrojado (-40%)</div>
+        </div>
+        """, unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
         
-        # Objetivos financeiros
-        st.subheader("Objetivos financeiros")
-        
+        # Retorno alvo com slider customizado
+        st.markdown("**Qual retorno anual você espera alcançar?**")
+        st.markdown('<div class="custom-slider">', unsafe_allow_html=True)
         retorno_alvo = st.slider(
-            "Qual é seu objetivo de retorno anual?",
-            min_value=3.0,
-            max_value=20.0,
-            value=8.0,
-            step=0.5,
-            format="%.1f%%",
-            help="O algoritmo tentará otimizar para este retorno, considerando seu perfil de risco"
+            label="Retorno alvo",
+            min_value=6,
+            max_value=25,
+            value=15,
+            step=1,
+            format="%d%%",
+            label_visibility="collapsed"
         )
+        st.markdown("""
+        <div class="slider-label">
+            <div class="slider-min">Conservador (6%)</div>
+            <div class="slider-max">Arrojado (25%)</div>
+        </div>
+        """, unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
         
-        objetivos = st.multiselect(
-            "Quais são seus principais objetivos?",
-            [
-                "Aposentadoria", 
-                "Independência financeira",
-                "Compra de imóvel",
-                "Educação",
-                "Reserva de emergência",
-                "Viagens",
-                "Proteção patrimonial",
-                "Crescimento patrimonial"
-            ],
-            default=["Crescimento patrimonial"],
-            help="Selecione um ou mais objetivos"
+        # Determinar perfil de risco automático com base nas respostas
+        pontos_risco = 0
+        
+        # Horizonte
+        if horizonte == "Curto prazo (1-2 anos)":
+            pontos_risco += 1
+        elif horizonte == "Médio prazo (3-5 anos)":
+            pontos_risco += 2
+        else:  # Longo prazo
+            pontos_risco += 3
+            
+        # Objetivo
+        if objetivo == "Preservação de Capital":
+            pontos_risco += 1
+        elif objetivo == "Renda Passiva" or objetivo == "Crescimento Moderado":
+            pontos_risco += 2
+        else:  # Crescimento agressivo
+            pontos_risco += 3
+            
+        # Reação a perdas
+        if reacao_perda == "Vendo imediatamente para evitar mais perdas":
+            pontos_risco += 1
+        elif reacao_perda == "Fico preocupado, mas aguardo um pouco":
+            pontos_risco += 2
+        elif reacao_perda == "Mantenho a calma, pois faz parte do ciclo de investimentos":
+            pontos_risco += 3
+        else:  # Compra mais
+            pontos_risco += 4
+            
+        # Experiência
+        if experiencia == "Iniciante - Estou começando a investir agora":
+            pontos_risco += 1
+        elif experiencia == "Intermediário - Já invisto há algum tempo":
+            pontos_risco += 2
+        else:  # Avançado
+            pontos_risco += 3
+            
+        # Tolerância a drawdown (convertida proporcionalmente de 1-4)
+        pontos_tolerancia = 1 + (tolerancia_drawdown - 5) / (40 - 5) * 3
+        pontos_risco += pontos_tolerancia
+        
+        # Determinar perfil com base na pontuação total
+        pontuacao_max = 3 + 3 + 4 + 3 + 4  # 17 pontos max
+        porcentagem_risco = pontos_risco / pontuacao_max
+        
+        if porcentagem_risco < 0.4:
+            perfil_risco = "Conservador"
+        elif porcentagem_risco < 0.7:
+            perfil_risco = "Moderado"
+        else:
+            perfil_risco = "Arrojado"
+        
+        # Converter tolerância em valor numérico
+        tolerancia_drawdown_numeric = -tolerancia_drawdown  # valor negativo para refletir perda
+        
+        # Botão para submeter formulário
+        st.markdown("</div>", unsafe_allow_html=True)
+        
+        submit_button = st.form_submit_button(
+            label="Otimizar minha carteira",
+            type="primary",
+            use_container_width=True
         )
-        
-        # Preferências de investimento
-        st.subheader("Preferências de investimento")
-        
-        regioes = st.multiselect(
-            "Quais regiões você prefere incluir em sua carteira?",
-            [
-                "EUA",
-                "Europa",
-                "Ásia-Pacífico",
-                "Mercados Emergentes",
-                "Global (todas regiões)"
-            ],
-            default=["Global (todas regiões)"],
-            help="Selecione as regiões geográficas para incluir na sua carteira"
-        )
-        
-        # Botão de envio
-        submitted = st.form_submit_button("Gerar minha carteira", use_container_width=True, type="primary")
-        
-        if submitted:
-            if not nome or not email:
-                st.error("Por favor, preencha nome e email antes de continuar.")
-            else:
-                # Salvar dados do perfil
-                # Converter tolerância de drawdown para um valor numérico (remover o símbolo %)
-                tolerancia_drawdown_numeric = float(tolerancia_drawdown.replace("%", ""))
+    
+    # Se o botão foi clicado
+    if submit_button:
+        with st.spinner("Processando seu perfil..."):
+            # Criar dicionário de perfil
+            perfil = {
+                "horizonte": horizonte,
+                "objetivo": objetivo,
+                "reacao_perda": reacao_perda,
+                "experiencia": experiencia,
+                "tolerancia_drawdown": tolerancia_drawdown,
+                "tolerancia_drawdown_numeric": tolerancia_drawdown_numeric,
+                "retorno_alvo": retorno_alvo,
+                "perfil_risco": perfil_risco
+            }
+            
+            # Armazenar no session_state
+            st.session_state["perfil"] = perfil
+            
+            # Feedback ao usuário
+            col1, col2, col3 = st.columns([1, 2, 1])
+            with col2:
+                st.success(f"Perfil de risco: {perfil_risco}")
                 
-                perfil_data = {
-                    "nome": nome,
-                    "email": email,
-                    "horizonte": horizonte,
-                    "tolerancia_drawdown": tolerancia_drawdown,
-                    "tolerancia_drawdown_numeric": tolerancia_drawdown_numeric,  # Valor numérico para cálculos
-                    "perfil_risco": perfil_risco,
-                    "retorno_alvo": retorno_alvo,
-                    "objetivos": objetivos,
-                    "regioes": regioes,
-                    "data_criacao": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                }
+                # Indicador de progresso
+                st.progress(1.0)
                 
-                # Criar diretório temp se não existir
-                os.makedirs("temp", exist_ok=True)
+                st.markdown(f"""
+                <div style="background-color: #F0F7FF; border-radius: 10px; padding: 15px; margin-top: 20px; margin-bottom: 20px; text-align: center;">
+                    <p style="margin-bottom: 10px;"><b>Seu perfil foi definido como {perfil_risco}</b></p>
+                    <p style="font-size: 0.9rem; color: #4F5665;">Retorno alvo: {retorno_alvo}%</p>
+                    <p style="font-size: 0.9rem; color: #4F5665;">Tolerância a drawdown: {tolerancia_drawdown}%</p>
+                </div>
+                """, unsafe_allow_html=True)
                 
-                # Salvar perfil temporariamente
-                with open("temp/perfil.json", "w", encoding="utf-8") as f:
-                    json.dump(perfil_data, f, ensure_ascii=False, indent=4)
-                
-                # Adicionar à sessão e redirecionar
-                st.session_state["perfil"] = perfil_data
-                st.session_state["show_results"] = True
-                
-                # Indicação visual de sucesso
-                st.success("Perfil salvo com sucesso! Redirecionando para os resultados...")
-                
-                # Redirecionar para página de resultados usando o método atualizado
-                st.session_state.nav = "Resultados"
-                st.rerun() 
+                st.button(
+                    "Ver minha carteira otimizada",
+                    type="primary",
+                    on_click=lambda: _navegar_para_resultados(),
+                    use_container_width=True
+                )
+    
+    st.markdown('</div>', unsafe_allow_html=True)
+
+def _navegar_para_resultados():
+    """
+    Função auxiliar para navegação
+    """
+    st.session_state.nav = "Resultados"
+    st.query_params["page"] = "resultados" 

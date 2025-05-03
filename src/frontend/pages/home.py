@@ -2,66 +2,190 @@ import streamlit as st
 
 def show():
     """
-    Renderiza a página inicial do aplicativo
+    Renderiza a página inicial do aplicativo com design aprimorado
     """
-    st.title("Bem-vindo ao ETF Blueprint")
+    # CSS personalizado para melhorar a aparência
+    st.markdown("""
+    <style>
+        .main-title {
+            font-size: 2.5rem !important;
+            font-weight: 600 !important;
+            margin-bottom: 0.8rem !important;
+            color: #121A3E;
+        }
+        .hero-container {
+            background: linear-gradient(135deg, #4361EE 0%, #3A0CA3 100%);
+            padding: 3rem;
+            border-radius: 12px;
+            margin-bottom: 2rem;
+            color: white;
+            box-shadow: 0 10px 20px rgba(67, 97, 238, 0.15);
+        }
+        .hero-title {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+            line-height: 1.2;
+        }
+        .hero-subtitle {
+            font-size: 1.3rem;
+            opacity: 0.9;
+            margin-bottom: 2rem;
+            line-height: 1.5;
+        }
+        .feature-card {
+            background-color: white;
+            padding: 1.5rem;
+            border-radius: 10px;
+            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06);
+            height: 100%;
+            transition: transform 0.3s;
+        }
+        .feature-card:hover {
+            transform: translateY(-5px);
+        }
+        .feature-icon {
+            font-size: 2rem;
+            margin-bottom: 1rem;
+            color: #4361EE;
+        }
+        .feature-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            color: #121A3E;
+        }
+        .feature-description {
+            color: #4F5665;
+            font-size: 1rem;
+            line-height: 1.5;
+        }
+        .cta-section {
+            background-color: #F8F9FE;
+            padding: 2rem;
+            border-radius: 12px;
+            text-align: center;
+            margin-top: 2rem;
+            margin-bottom: 2rem;
+        }
+        .steps-container {
+            background-color: white;
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06);
+            margin-bottom: 2rem;
+        }
+        .step-number {
+            background-color: #4361EE;
+            color: white;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 10px;
+            font-weight: bold;
+        }
+        .step-text {
+            display: inline;
+            font-size: 1.1rem;
+            vertical-align: middle;
+        }
+    </style>
+    """, unsafe_allow_html=True)
     
-    # Frase mantra em destaque
-    st.markdown(
-        """
-        <div style='background-color: #f0f2f6; padding: 20px; border-radius: 10px; text-align: center;'>
-            <h2 style='color: #1e3a8a; font-weight: bold;'>Os dados vão salvar seus investimentos.</h2>
-        </div>
-        """, 
-        unsafe_allow_html=True
-    )
+    # Hero section
+    st.markdown("""
+    <div class="hero-container">
+        <div class="hero-title">ETF Blueprint</div>
+        <div class="hero-subtitle">Sua carteira global de ETFs otimizada por dados e algoritmos avançados, pronta em minutos.</div>
+    </div>
+    """, unsafe_allow_html=True)
     
-    st.markdown("---")
+    # Como funciona
+    st.markdown('<div class="steps-container">', unsafe_allow_html=True)
+    st.subheader("Como funciona")
     
-    # Descrição do serviço
     col1, col2 = st.columns([3, 2])
     
     with col1:
-        st.subheader("Sua carteira global de ETFs em apenas 5 minutos")
-        st.markdown(
-            """
-            O ETF Blueprint utiliza algoritmos avançados para criar uma carteira de ETFs 
-            personalizada de acordo com seu perfil de risco e objetivos financeiros.
-            
-            **Como funciona:**
-            1. Preencha seu perfil de investimento
-            2. Nossos algoritmos otimizam sua carteira
-            3. Receba um relatório completo em PDF
-            4. Implemente sua estratégia com o CSV exportado
-            """
-        )
+        st.markdown("""
+        <div style="margin-bottom: 15px;">
+            <div class="step-number">1</div>
+            <div class="step-text">Preencha seu perfil de investimento e objetivos</div>
+        </div>
+        <div style="margin-bottom: 15px;">
+            <div class="step-number">2</div>
+            <div class="step-text">Nossos algoritmos otimizam sua carteira personalizada</div>
+        </div>
+        <div style="margin-bottom: 15px;">
+            <div class="step-number">3</div>
+            <div class="step-text">Receba uma análise detalhada com visualizações claras</div>
+        </div>
+        <div style="margin-bottom: 15px;">
+            <div class="step-number">4</div>
+            <div class="step-text">Exporte sua estratégia para implementação imediata</div>
+        </div>
+        """, unsafe_allow_html=True)
         
-        # Botão com implementação alternativa
-        btn_comecar = st.button("Começar agora", type="primary", use_container_width=True, key="btn_comecar")
-        if btn_comecar:
-            # Definir estado de navegação
-            st.session_state["nav"] = "Perfil de Risco"
-            # Forçar recarregamento da página
-            st.query_params["page"] = "perfil"
-            st.rerun()
-    
     with col2:
         st.image("assets/investment_chart.png", use_column_width=True)
     
-    # Vantagens
-    st.markdown("---")
+    st.markdown('</div>', unsafe_allow_html=True)
+    
+    # Botão de Call-to-Action
+    st.markdown('<div class="cta-section">', unsafe_allow_html=True)
+    st.markdown('<h2 style="margin-bottom: 20px; color: #121A3E;">Pronto para otimizar seus investimentos?</h2>', unsafe_allow_html=True)
+    btn_comecar = st.button("Começar agora", type="primary", use_container_width=True, key="btn_comecar")
+    st.markdown('</div>', unsafe_allow_html=True)
+    if btn_comecar:
+        st.session_state["nav"] = "Perfil de Risco"
+        st.query_params["page"] = "perfil"
+        st.rerun()
+    
+    # Recursos em cards
     st.subheader("Por que usar o ETF Blueprint?")
     
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        st.markdown("### 📊 Dados em tempo real")
-        st.markdown("Utilizamos dados financeiros atualizados para otimizar sua carteira.")
+        st.markdown("""
+        <div class="feature-card">
+            <div class="feature-icon">📊</div>
+            <div class="feature-title">Dados em tempo real</div>
+            <div class="feature-description">
+                Utilizamos dados financeiros atualizados de mercado para otimizar sua carteira com precisão.
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
     
     with col2:
-        st.markdown("### 🔍 Análise personalizada")
-        st.markdown("Cada carteira é adaptada ao seu perfil de risco e objetivos.")
+        st.markdown("""
+        <div class="feature-card">
+            <div class="feature-icon">🔍</div>
+            <div class="feature-title">Análise personalizada</div>
+            <div class="feature-description">
+                Cada carteira é adaptada ao seu perfil de risco, horizonte de investimento e objetivos financeiros.
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
     
     with col3:
-        st.markdown("### 📝 Explicação simplificada")
-        st.markdown("Receba uma narrativa em linguagem simples sobre sua estratégia.") 
+        st.markdown("""
+        <div class="feature-card">
+            <div class="feature-icon">📝</div>
+            <div class="feature-title">Explicação simplificada</div>
+            <div class="feature-description">
+                Receba uma narrativa em linguagem simples que explica sua estratégia e facilita a compreensão.
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    # Footer com informações adicionais
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown("""
+    <div style="text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee; color: #666; font-size: 0.9rem;">
+        ETF Blueprint utiliza a API Financial Modeling Prep para dados de mercado e tecnologias de IA para análises personalizadas.
+    </div>
+    """, unsafe_allow_html=True) 

@@ -1,0 +1,7 @@
+[theme]
+# Paleta de cores moderna para fintech
+primaryColor = "#4361EE"        # Azul vibrante para elementos interativos
+backgroundColor = "#FFFFFF"      # Fundo branco para limpeza visual
+secondaryBackgroundColor = "#F8F9FE" # Cinza claro para elementos secundários
+textColor = "#121A3E"           # Azul escuro quase preto para texto
+font = "sans serif"             # Fonte limpa e moderna 

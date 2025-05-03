@@ -154,13 +154,132 @@ def get_table_download_link(df, filename, linkname):
     """
     csv = df.to_csv(index=False)
     b64 = base64.b64encode(csv.encode()).decode()
-    href = f'<a href="data:file/csv;base64,{b64}" download="{filename}">{linkname}</a>'
+    href = f'<a href="data:file/csv;base64,{b64}" download="{filename}" class="download-button">{linkname}</a>'
     return href
 
 async def show():
     """
     Renderiza a página de resultados com a carteira otimizada
     """
+    # Adicionando estilos CSS personalizados
+    st.markdown("""
+    <style>
+        /* Estilo geral */
+        .results-page {
+            padding: 1rem 0;
+        }
+        
+        /* Estilos para os cards de métricas */
+        .metric-card {
+            background-color: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06);
+            text-align: center;
+            height: 100%;
+            transition: transform 0.3s;
+        }
+        .metric-card:hover {
+            transform: translateY(-5px);
+        }
+        .metric-title {
+            font-size: 1rem;
+            color: #4F5665;
+            margin-bottom: 5px;
+        }
+        .metric-value {
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: #4361EE;
+        }
+        .metric-value.negative {
+            color: #EF476F;
+        }
+        
+        /* Estilos para a análise personalizada */
+        .analysis-card {
+            background-color: white;
+            border-radius: 10px;
+            border-left: 8px solid #4361EE;
+            padding: 25px;
+            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06);
+            color: #333333;
+            font-size: 16px;
+            line-height: 1.6;
+            margin-bottom: 2rem;
+        }
+        
+        /* Estilos para a tabela de alocação */
+        .stDataFrame {
+            border-radius: 10px !important;
+            overflow: hidden !important;
+        }
+        .dataframe {
+            border-collapse: collapse !important;
+            width: 100% !important;
+        }
+        .dataframe th {
+            background-color: #4361EE !important;
+            color: white !important;
+            font-weight: 600 !important;
+            text-align: left !important;
+            padding: 12px !important;
+        }
+        .dataframe td {
+            padding: 12px !important;
+            border-bottom: 1px solid #f0f0f0 !important;
+        }
+        .dataframe tr:hover {
+            background-color: #f8f9fe !important;
+        }
+        
+        /* Estilos para os botões de download */
+        .download-section {
+            background-color: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06);
+            margin-top: 20px;
+            margin-bottom: 20px;
+        }
+        .download-button {
+            display: inline-block;
+            background-color: #4361EE;
+            color: white !important;
+            padding: 10px 20px;
+            border-radius: 5px;
+            text-decoration: none;
+            font-weight: 600;
+            text-align: center;
+            transition: background-color 0.3s;
+            margin-top: 10px;
+        }
+        .download-button:hover {
+            background-color: #3A0CA3;
+            text-decoration: none;
+        }
+        
+        /* Título da seção com linha destaque */
+        .section-title {
+            position: relative;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+            font-weight: 600;
+            color: #121A3E;
+        }
+        .section-title:after {
+            content: "";
+            position: absolute;
+            left: 0;
+            bottom: 0;
+            width: 50px;
+            height: 3px;
+            background-color: #4361EE;
+        }
+    </style>
+    """, unsafe_allow_html=True)
+    
+    st.markdown('<div class="results-page">', unsafe_allow_html=True)
     st.title("Resultados - Sua Carteira Otimizada")
     
     # Verificar se há perfil na sessão
@@ -348,23 +467,54 @@ async def show():
             st.error("Não foi possível gerar a carteira otimizada. Verifique sua conexão com a internet e as chaves de API.")
             return
     
-    # Mostrar métricas principais
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Retorno Esperado", f"{metricas['retorno_esperado']}%")
-    col2.metric("Volatilidade", f"{metricas['volatilidade']}%")
-    col3.metric("Índice Sharpe", f"{metricas['sharpe_ratio']}")
-    col4.metric("Drawdown Máximo", f"{metricas['max_drawdown']}%")
+    # Mostrar métricas principais com cards aprimorados
+    st.markdown('<h2 class="section-title">Métricas da Carteira</h2>', unsafe_allow_html=True)
     
-    # Mostrar narrativa
-    st.markdown("## Análise Personalizada")
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.markdown(f"""
+        <div class="metric-card">
+            <div class="metric-title">Retorno Esperado</div>
+            <div class="metric-value">{metricas['retorno_esperado']:.2f}%</div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col2:
+        st.markdown(f"""
+        <div class="metric-card">
+            <div class="metric-title">Volatilidade</div>
+            <div class="metric-value">{metricas['volatilidade']:.2f}%</div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col3:
+        st.markdown(f"""
+        <div class="metric-card">
+            <div class="metric-title">Índice Sharpe</div>
+            <div class="metric-value">{metricas['sharpe_ratio']:.2f}</div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col4:
+        drawdown_class = "negative" if metricas['max_drawdown'] < 0 else ""
+        st.markdown(f"""
+        <div class="metric-card">
+            <div class="metric-title">Drawdown Máximo</div>
+            <div class="metric-value {drawdown_class}">{metricas['max_drawdown']:.2f}%</div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    # Mostrar narrativa em card redesenhado
+    st.markdown('<h2 class="section-title">Análise Personalizada</h2>', unsafe_allow_html=True)
     st.markdown(f"""
-    <div style="background-color: #ffffff; padding: 25px; border-radius: 10px; border-left: 8px solid #1e88e5; box-shadow: 0 2px 5px rgba(0,0,0,0.1); color: #333333; font-size: 16px; line-height: 1.6;">
+    <div class="analysis-card">
         {narrativa.replace('    ', '').replace('\n', '<br><br>')}
     </div>
     """, unsafe_allow_html=True)
     
     # Mostrar tabela de alocação
-    st.markdown("## Alocação Recomendada")
+    st.markdown('<h2 class="section-title">Alocação Recomendada</h2>', unsafe_allow_html=True)
     
     # Formatar tabela
     tabela_exibicao = carteira_df.copy()
@@ -392,20 +542,33 @@ async def show():
     st.dataframe(tabela_exibicao, use_container_width=True)
     
     # Gráficos lado a lado
+    st.markdown('<h2 class="section-title">Visualização da Carteira</h2>', unsafe_allow_html=True)
+    
     col1, col2 = st.columns(2)
     
     # Gráfico de pizza para alocação
     with col1:
         st.markdown("### Distribuição da Carteira")
+        
+        # Melhorar as cores do gráfico
+        custom_colors = px.colors.qualitative.Prism
+        
         fig_pizza = px.pie(
             carteira_df, 
             values='peso', 
             names='symbol',
             hover_data=['name', 'categoria'],
             title='Alocação por ETF',
-            color_discrete_sequence=px.colors.qualitative.Plotly
+            color_discrete_sequence=custom_colors
         )
         fig_pizza.update_traces(textposition='inside', textinfo='percent+label')
+        fig_pizza.update_layout(
+            font=dict(size=14),
+            title_font=dict(size=18, color='#121A3E'),
+            legend=dict(font=dict(size=12)),
+            margin=dict(t=50, b=20, l=20, r=20),
+            paper_bgcolor='white'
+        )
         st.plotly_chart(fig_pizza, use_container_width=True)
     
     # Gráfico de fronteira eficiente
@@ -427,7 +590,7 @@ async def show():
             y=rets,
             mode='lines',
             name='Fronteira Eficiente',
-            line=dict(color='blue', width=2)
+            line=dict(color='#4361EE', width=3)
         ))
         
         # Adicionar ponto da carteira atual (usando os valores reais)
@@ -436,7 +599,7 @@ async def show():
             y=[atual_ret],
             mode='markers',
             name='Carteira Recomendada',
-            marker=dict(color='green', size=12, symbol='star')
+            marker=dict(color='#06D6A0', size=15, symbol='star')
         ))
         
         # Adicionar ponto de mínima volatilidade
@@ -445,7 +608,7 @@ async def show():
             y=[min_ret],
             mode='markers',
             name='Mínima Volatilidade',
-            marker=dict(color='blue', size=10)
+            marker=dict(color='#118AB2', size=12)
         ))
         
         # Adicionar ponto de máximo sharpe
@@ -454,7 +617,7 @@ async def show():
             y=[max_sharpe_ret],
             mode='markers',
             name='Máximo Sharpe Ratio',
-            marker=dict(color='red', size=10)
+            marker=dict(color='#EF476F', size=12)
         ))
         
         # Configurar layout com escalas adequadas
@@ -463,16 +626,20 @@ async def show():
             xaxis_title='Volatilidade (%)',
             yaxis_title='Retorno Esperado (%)',
             legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01),
-            margin=dict(l=10, r=10, t=30, b=10),
+            margin=dict(l=10, r=10, t=50, b=10),
             # Garantir que os eixos comportem os valores reais
             xaxis=dict(range=[0, max(max(vols) + 2, atual_vol + 2)]),
-            yaxis=dict(range=[0, max(max(rets) + 2, atual_ret + 2)])
+            yaxis=dict(range=[0, max(max(rets) + 2, atual_ret + 2)]),
+            font=dict(size=14),
+            title_font=dict(size=18, color='#121A3E'),
+            legend_font=dict(size=12),
+            paper_bgcolor='white'
         )
         
         st.plotly_chart(fig_frontier, use_container_width=True)
     
     # Gráfico de barras por categoria
-    st.markdown("### Alocação por Categoria")
+    st.markdown('<h2 class="section-title">Alocação por Categoria</h2>', unsafe_allow_html=True)
     
     # Agrupar por categoria
     categoria_df = carteira_df.groupby('categoria')['peso'].sum().reset_index()
@@ -484,23 +651,32 @@ async def show():
         title='Distribuição por Classe de Ativos',
         labels={'categoria': 'Categoria', 'peso': 'Alocação (%)'},
         color='categoria',
-        color_discrete_sequence=px.colors.qualitative.Safe
+        color_discrete_sequence=px.colors.qualitative.Bold
+    )
+    
+    fig_categoria.update_layout(
+        font=dict(size=14),
+        title_font=dict(size=18, color='#121A3E'),
+        xaxis_tickangle=-45,
+        margin=dict(t=50, b=20, l=20, r=20),
+        paper_bgcolor='white'
     )
     
     st.plotly_chart(fig_categoria, use_container_width=True)
     
     # Botões de download
-    st.markdown("## Exportar Resultados")
+    st.markdown('<h2 class="section-title">Exportar Resultados</h2>', unsafe_allow_html=True)
     
+    st.markdown('<div class="download-section">', unsafe_allow_html=True)
     col1, col2 = st.columns(2)
     
     with col1:
-        st.markdown("### Baixar CSV")
+        st.markdown("<h3>Baixar CSV</h3>", unsafe_allow_html=True)
         st.markdown("Exporte os dados da carteira para implementar em sua corretora.")
         st.markdown(get_table_download_link(carteira_df, "carteira_etf.csv", "Download CSV"), unsafe_allow_html=True)
     
     with col2:
-        st.markdown("### Relatório PDF")
+        st.markdown("<h3>Relatório PDF</h3>", unsafe_allow_html=True)
         st.markdown("Baixe um relatório completo com análise detalhada da sua carteira.")
         
         # Inicializar o gerador de PDF
@@ -520,7 +696,7 @@ async def show():
                     
                     # Criar link de download
                     pdf_filename = f"carteira_etf_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
-                    href = f'<a href="data:application/pdf;base64,{b64}" download="{pdf_filename}">Clique aqui para baixar o PDF</a>'
+                    href = f'<a href="data:application/pdf;base64,{b64}" download="{pdf_filename}" class="download-button">Clique aqui para baixar o PDF</a>'
                     
                     # Exibir link de download
                     st.success("PDF gerado com sucesso!")
@@ -529,4 +705,7 @@ async def show():
                     st.error(f"Erro ao gerar PDF: {str(e)}")
                     # Exibir detalhes do erro sempre, não apenas no modo debug
                     st.error("Detalhes do erro:")
-                    st.code(traceback.format_exc()) 
+                    st.code(traceback.format_exc())
+    
+    st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True) 
