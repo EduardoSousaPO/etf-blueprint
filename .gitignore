@@ -1,0 +1,44 @@
+# Bytecode compilado
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribuição / empacotamento
+dist/
+build/
+*.egg-info/
+
+# Ambiente virtual
+venv/
+env/
+ENV/
+
+# Arquivos de IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs
+*.log
+
+# Configurações locais
+.env
+config.local.py
+
+# Arquivos de cache
+.cache/
+.pytest_cache/
+
+# Arquivos temporários
+tmp/
+temp/
+
+# Notebooks
+.ipynb_checkpoints
+
+# Dados
+*.csv
+*.json
+*.db
+*.sqlite 

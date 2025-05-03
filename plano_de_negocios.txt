@@ -1,0 +1,68 @@
+A seguir está um plano de hiper-execução inspirado na obsessão por excelência de Elon Musk, Steve Jobs e dos fundadores do G4 Educação. Ele junta (1) visão de negócio, (2) roteiro tático semana a semana, (3) governança técnica para evitar alucinações de IA e (4) um PROMPT-MESTRE pronto para colar no Cursor.ai (ou Manus.ai) e coordenar vários agentes até a entrega final.
+
+1 · Visão de Negócio (“North Star”)
+Elemento	Definição rápida e audaciosa
+Proposta-raiz	“Em 5 minutos, qualquer investidor leigo recebe uma carteira de ETFs global otimizada e explicada em português.”
+Formato-MVP	Web-app em Streamlit + API FMP + OpenAI → PDF interativo + CSV pronto p/ investir
+Ticket de impulso	R$ 197 (produto principal) + upsell de R$ 97 (dashboard On-Line)
+Meta de 30 dias	52 vendas = R$ 10 244 receita bruta; campanha Meta Ads + afiliados
+Diferencial	Instantâneo + customizado + narrativa simples (poucos players oferecem os 3 juntos)
+
+2 · Roteiro Tático (“Plano de Voo”)
+Semana 0 – Setup de Poder
+Acionistas-chave: você (Product Owner), Cursor.ai (Squad Coding), ChatGPT (review).
+
+Criar repositório Git vazio no GitHub.
+
+Definir chaves: FMP_API_KEY, OPENAI_API_KEY, token Vercel.
+
+Semana 1 – Fundação de Código com Garantias
+Arquitetura (Decision-record):
+
+backend/ FastAPI + asyncio (somente API consumer / lógica).
+
+frontend/ Streamlit (UI).
+
+services/optimizer.py, services/fmp_client.py, services/openai_client.py.
+
+Isolar qualquer chamada externa em camada de service com testes unitários simulados.
+
+Padrões antifalha:
+
+Tipagem rígida com pydantic.
+
+pytest + pytest-httpx para mockar FMP/OpenAI.
+
+Linter + pre-commit (ruff, black).
+
+Semana 2 – UX & Storytelling
+Construir páginas:
+
+Home (frase-mantra: “Os dados vão salvar seus investimentos.”)
+
+Perfil de Risco (Inputs).
+
+Resultados (tabela + gráficos).
+
+Implementar tema CSS minimalista (Streamlit theme override).
+
+Semana 3 – PDF & Distribuição
+Geração de PDF em background job (reportlab ou weasyprint).
+
+Webhook Hotmart/Mercado Pago → dispara geração → e-mail SendGrid com link S3 (Vercel Blob).
+
+Semana 4 – Lançamento & Loop de Vendas Rápidas
+Criar landing Hotmart pé-de-página scroll.
+
+Rodar Meta Ads e convite de afiliados.
+
+Monitorar métricas (Google Analytics + eventos Hotmart).
+
+3 · Governança Técnica contra Alucinação de IA
+Risco	Contramedida “muskiana”
+Código incoerente	Checklist de revisão automática (pytest, ruff, type-checking).
+Endpoints FMP mudam	Variável FMP_VERSION e testes que validam resposta contra schema esperado.
+Alucinação de OpenAI	Prompt-template fixo + temperatura 0,2; pós-validação por regex (proíbe texto faltando ETFs).
+Escala de tráfego	Deploy Vercel Serverless; caching em Redis Cloud (gratuito < 25 MB).
+Pagamentos não conciliados	Hotmart → webhook → gravar na tabela sales (Postgre/Neon) antes de liberar download.
+
