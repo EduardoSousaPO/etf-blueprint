@@ -5,15 +5,20 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 
-# Carregar variáveis de ambiente do arquivo .env
-load_dotenv()
+# Carregar variáveis de ambiente do arquivo .env com tratamento de erros
+try:
+    load_dotenv()
+    print("Arquivo .env carregado com sucesso")
+except Exception as e:
+    print(f"Erro ao carregar arquivo .env: {str(e)}")
+    print("Continuando sem o arquivo .env...")
 
 # Verificar se as variáveis foram carregadas
 fmp_api_key = os.getenv("FMP_API_KEY")
 openai_api_key = os.getenv("OPENAI_API_KEY")
 
 if not fmp_api_key or not openai_api_key:
-    st.error("Erro: Variáveis de ambiente não encontradas. Verifique o arquivo .env")
+    st.warning("Variáveis de ambiente não encontradas. Para executar o aplicativo completamente, configure o arquivo .env")
     print(f"FMP_API_KEY: {'Encontrada' if fmp_api_key else 'Não encontrada'}")
     print(f"OPENAI_API_KEY: {'Encontrada' if openai_api_key else 'Não encontrada'}")
 
