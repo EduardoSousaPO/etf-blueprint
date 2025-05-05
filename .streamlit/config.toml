@@ -1,7 +1,15 @@
 [theme]
 # Paleta de cores moderna para fintech
-primaryColor = "#4361EE"
+primaryColor = "#1E88E5"
 backgroundColor = "#FFFFFF"
-secondaryBackgroundColor = "#F8F9FE"
-textColor = "#121A3E"
-font = "sans serif" 
+secondaryBackgroundColor = "#F5F5F5"
+textColor = "#212121"
+font = "sans serif"
+
+[server]
+headless = true
+enableCORS = false
+enableXsrfProtection = true
+
+[browser]
+gatherUsageStats = false 
