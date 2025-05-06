@@ -82,14 +82,25 @@ if 'nav' not in st.session_state:
     st.session_state.nav = "Home"
 
 # Verifica parâmetros de URL para navegação
-if "page" in st.query_params:
-    page = st.query_params["page"].lower()
-    if page == "perfil":
-        st.session_state.nav = "Perfil de Risco"
-    elif page == "resultados":
-        st.session_state.nav = "Resultados"
-    # Limpar os parâmetros após uso
-    st.query_params.clear()
+try:
+    print("Tentando acessar query_params")
+    query_params_existe = hasattr(st, 'query_params')
+    print(f"query_params existe? {query_params_existe}")
+    
+    if query_params_existe and "page" in st.query_params:
+        page = st.query_params["page"].lower()
+        print(f"Parâmetro page encontrado: {page}")
+        if page == "perfil":
+            st.session_state.nav = "Perfil de Risco"
+        elif page == "resultados":
+            st.session_state.nav = "Resultados"
+        # Limpar os parâmetros após uso
+        st.query_params.clear()
+except Exception as e:
+    print(f"ERRO ao acessar query_params: {str(e)}")
+    st.warning(f"Erro ao processar parâmetros de URL: {e}")
+    # Se não for possível acessar query_params, continuar com a navegação padrão
+    pass
 
 # Sidebar para navegação
 st.sidebar.title("ETF Blueprint")
