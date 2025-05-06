@@ -130,7 +130,7 @@ def show():
         """, unsafe_allow_html=True)
         
     with col2:
-        st.image("assets/investment_chart.png", use_column_width=True)
+        st.image("assets/investment_chart.png", use_container_width=True)
     
     st.markdown('</div>', unsafe_allow_html=True)
     
