@@ -12,7 +12,4 @@ enableCORS = true
 enableXsrfProtection = true
 
 [browser]
-gatherUsageStats = false
-
-[deprecation]
-showPyplotGlobalUse = false 
+gatherUsageStats = false 

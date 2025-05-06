@@ -141,7 +141,11 @@ def show():
     st.markdown('</div>', unsafe_allow_html=True)
     if btn_comecar:
         st.session_state["nav"] = "Perfil de Risco"
-        st.query_params["page"] = "perfil"
+        try:
+            st.query_params["page"] = "perfil"
+        except Exception as e:
+            # Se não conseguir definir os parâmetros de URL, continuar sem eles
+            pass
         st.rerun()
     
     # Recursos em cards
