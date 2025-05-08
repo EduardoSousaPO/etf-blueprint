@@ -479,7 +479,8 @@ async def show():
     print("Início da função show() em resultados.py")
     
     # Adicionando estilos CSS personalizados
-    css_styles = """
+    # Quebrando o CSS em várias strings para evitar problemas com caracteres de escape
+    css_parte1 = """
     <style>
         /* Estilo geral */
         .results-page {
@@ -504,6 +505,9 @@ async def show():
             color: #4F5665;
             margin-bottom: 5px;
         }
+    """
+    
+    css_parte2 = """
         .metric-value {
             font-size: 1.8rem;
             font-weight: 700;
@@ -525,7 +529,9 @@ async def show():
             line-height: 1.6;
             margin-bottom: 2rem;
         }
-        
+    """
+    
+    css_parte3 = """
         /* Estilos para a tabela de alocação */
         .stDataFrame {
             border-radius: 10px !important;
@@ -549,7 +555,9 @@ async def show():
         .dataframe tr:hover {
             background-color: #f8f9fe !important;
         }
-        
+    """
+    
+    css_parte4 = """
         /* Estilos para os botões de download */
         .download-section {
             background-color: white;
@@ -575,7 +583,9 @@ async def show():
             background-color: #3A0CA3;
             text-decoration: none;
         }
-        
+    """
+    
+    css_parte5 = """
         /* Título da seção com linha destaque */
         .section-title {
             position: relative;
@@ -595,7 +605,10 @@ async def show():
         }
     </style>
     """
-    st.markdown(css_styles, unsafe_allow_html=True)
+    
+    # Concatenar todas as partes do CSS e renderizar
+    css_completo = css_parte1 + css_parte2 + css_parte3 + css_parte4 + css_parte5
+    st.markdown(css_completo, unsafe_allow_html=True)
     
     st.markdown('<div class="results-page">', unsafe_allow_html=True)
     st.title("Resultados - Sua Carteira Otimizada")
