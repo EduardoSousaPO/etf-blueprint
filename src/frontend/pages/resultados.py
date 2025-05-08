@@ -415,9 +415,14 @@ def display_results(carteira_df, metricas, narrativa, debug_mode=False):
                         print("Iniciando geração do PDF...")
                         
                         # Gerar o PDF
-                        if 'perfil' in locals() and 'carteira_otimizada' in locals():
-                            # Criar referência segura para perfil
-                            perfil_pdf = perfil
+                        if 'carteira_otimizada' in locals():
+                            # Obter perfil diretamente da sessão para evitar erro
+                            perfil_pdf = st.session_state.get("perfil", {
+                                'perfil_risco': 'Moderado',
+                                'horizonte': 10,
+                                'retorno_alvo': metricas['retorno_esperado'],
+                                'tolerancia_drawdown_numeric': metricas['max_drawdown']
+                            })
                             pdf_bytes = pdf_gen.generate(perfil_pdf, carteira_otimizada, metricas, narrativa)
                         else:
                             # Caso onde estamos usando dados simulados
