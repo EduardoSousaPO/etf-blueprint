@@ -427,7 +427,19 @@ def display_results(carteira_df, metricas, narrativa, debug_mode=False):
                             carteira_obj.sharpe_ratio = metricas['sharpe_ratio']
                             carteira_obj.max_drawdown = metricas['max_drawdown']
                             
-                            pdf_bytes = pdf_gen.generate(perfil, carteira_obj, metricas, narrativa)
+                            # Verificar se o perfil existe e criar um perfil padrão se necessário
+                            if 'perfil' not in globals() and 'perfil' not in locals():
+                                print("Perfil não encontrado, criando perfil padrão para o PDF")
+                                perfil_pdf = {
+                                    'perfil_risco': 'Moderado',
+                                    'horizonte': 10,
+                                    'retorno_alvo': metricas['retorno_esperado'],
+                                    'tolerancia_drawdown_numeric': metricas['max_drawdown']
+                                }
+                            else:
+                                perfil_pdf = perfil
+                            
+                            pdf_bytes = pdf_gen.generate(perfil_pdf, carteira_obj, metricas, narrativa)
                         
                         # Codificar para base64 para download
                         b64 = base64.b64encode(pdf_bytes).decode()
@@ -443,7 +455,13 @@ def display_results(carteira_df, metricas, narrativa, debug_mode=False):
                         print(f"Erro ao gerar PDF: {str(e)}")
                         st.error(f"Erro ao gerar PDF: {str(e)}")
                         # Exibir detalhes do erro sempre, não apenas no modo debug
-                        if debug_mode:
+                        # Verificar se debug_mode existe e é verdadeiro
+                        try:
+                            if debug_mode:
+                                st.error("Detalhes do erro:")
+                                st.code(traceback.format_exc())
+                        except NameError:
+                            # Se debug_mode não estiver definido, mostrar traceback de qualquer forma
                             st.error("Detalhes do erro:")
                             st.code(traceback.format_exc())
     except Exception as e:
