@@ -168,17 +168,10 @@ def show():
     btn_comecar = st.button("Começar agora", type="primary", key="btn_comecar")
     st.markdown('</div>', unsafe_allow_html=True)
     if btn_comecar:
+        # Simplificação direta sem reimportar streamlit
         st.session_state["nav"] = "Perfil de Risco"
-        try:
-            # Forma antiga mais compatível de redirecionamento
-            import streamlit as st
-            st.session_state["nav"] = "Perfil de Risco"
-            st.experimental_rerun()
-        except Exception as e:
-            print(f"Erro ao navegar: {str(e)}")
-            # Fallback básico
-            st.success("Redirecionando para página de perfil...")
-            st.session_state["nav"] = "Perfil de Risco"
+        # Usando session_state para guardar que queremos navegar
+        st.session_state["navigate_to_perfil"] = True
     
     # Recursos em cards
     st.subheader("Por que usar o ETF Blueprint?")

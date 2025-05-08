@@ -160,6 +160,12 @@ def run_async(func):
 # Renderiza a página com base no session_state
 if st.session_state.nav == "Home":
     show_home()
+    # Verificar se precisamos navegar para a página de perfil após o clique no botão
+    if st.session_state.get("navigate_to_perfil", False):
+        # Limpar a flag de navegação
+        st.session_state.pop("navigate_to_perfil", None)
+        # Fazer o rerun para atualizar a navegação
+        st.rerun()
 elif st.session_state.nav == "Perfil de Risco":
     show_perfil()
 elif st.session_state.nav == "Resultados":
