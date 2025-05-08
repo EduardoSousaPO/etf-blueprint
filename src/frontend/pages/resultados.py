@@ -205,12 +205,27 @@ def display_results(carteira_df, metricas, narrativa, debug_mode=False):
     st.markdown('<h2 class="section-title">Análise Personalizada</h2>', unsafe_allow_html=True)
     # Corrigir o problema com o caractere de escape \n na f-string
     # Primeiro fazer o processamento do texto e depois incluir na f-string
-    narrativa_processada = narrativa.replace('    ', '').replace('\n', '<br><br>')
-    st.markdown("""
-    <div class="analysis-card">
-        {}
-    </div>
-    """.format(narrativa_processada), unsafe_allow_html=True)
+    try:
+        # Garantir que a narrativa seja uma string e tratar casos inesperados
+        if not isinstance(narrativa, str):
+            narrativa = str(narrativa) if narrativa is not None else "Análise não disponível no momento."
+            
+        narrativa_processada = narrativa.replace('    ', '').replace('\n', '<br><br>')
+        st.markdown("""
+        <div class="analysis-card">
+            {}
+        </div>
+        """.format(narrativa_processada), unsafe_allow_html=True)
+    except Exception as e:
+        print(f"Erro ao processar narrativa: {str(e)}")
+        # Exibir uma mensagem alternativa em caso de erro
+        st.markdown("""
+        <div class="analysis-card">
+            Não foi possível gerar a análise detalhada neste momento. 
+            <br><br>
+            Recomendamos revisar esta carteira periodicamente e consultar um profissional financeiro.
+        </div>
+        """, unsafe_allow_html=True)
     
     # Mostrar tabela de alocação
     st.markdown('<h2 class="section-title">Alocação Recomendada</h2>', unsafe_allow_html=True)
@@ -701,6 +716,17 @@ async def show():
             
             print("Otimizando carteira...")
             try:
+                # Validar parâmetros antes de chamar a API
+                if not isinstance(retorno_alvo, (int, float)) or retorno_alvo <= 0:
+                    raise ValueError(f"Retorno alvo inválido: {retorno_alvo}")
+                
+                if not isinstance(tolerancia_drawdown, (int, float)):
+                    raise ValueError(f"Tolerância a drawdown inválida: {tolerancia_drawdown}")
+                
+                # Verificar se temos dados de ETF válidos antes de prosseguir
+                if not etfs_data or not isinstance(etfs_data, list):
+                    raise ValueError(f"Dados de ETFs inválidos ou vazios: {len(etfs_data) if etfs_data else 0} ETFs")
+                
                 carteira_otimizada = await optimizer.optimize_portfolio(
                     etf_data=etfs_data,
                     target_return=retorno_alvo,
@@ -708,6 +734,10 @@ async def show():
                     max_drawdown=tolerancia_drawdown
                 )
                 print("Otimização concluída com sucesso")
+                
+                # Validar resultados da otimização
+                if not hasattr(carteira_otimizada, 'etfs') or not carteira_otimizada.etfs:
+                    raise ValueError("Otimização não retornou ETFs válidos")
                 
                 if debug_mode:
                     end_time = datetime.now()
@@ -784,11 +814,41 @@ async def show():
             
             # Normalizar os pesos finais para que somem 100%
             total_peso = sum(etf.get('peso', 0) for etf in carteira_otimizada.etfs)
-            for etf in carteira_otimizada.etfs:
-                etf['peso'] = (etf.get('peso', 0) / total_peso) * 100
+            
+            # Evitar divisão por zero
+            if total_peso <= 0:
+                print("ATENÇÃO: Soma dos pesos é zero ou negativa. Aplicando pesos iguais.")
+                # Aplicar pesos iguais em caso de problema
+                peso_igual = 100.0 / len(carteira_otimizada.etfs) if carteira_otimizada.etfs else 0
+                for etf in carteira_otimizada.etfs:
+                    etf['peso'] = peso_igual
+            else:
+                # Normalização segura
+                for etf in carteira_otimizada.etfs:
+                    try:
+                        etf['peso'] = (etf.get('peso', 0) / total_peso) * 100
+                    except Exception as e:
+                        print(f"Erro ao normalizar peso do ETF {etf.get('symbol', 'desconhecido')}: {str(e)}")
+                        etf['peso'] = 0  # Valor seguro em caso de erro
+            
+            # Verificar se a soma dos pesos está próxima de 100% após normalização
+            soma_final = sum(etf.get('peso', 0) for etf in carteira_otimizada.etfs)
+            if abs(soma_final - 100.0) > 0.1:  # Tolerância de 0.1%
+                print(f"ATENÇÃO: Soma dos pesos após normalização é {soma_final:.2f}%, não 100%")
             
             # Converter para DataFrame para visualização
-            carteira_df = pd.DataFrame(carteira_otimizada.etfs)
+            try:
+                carteira_df = pd.DataFrame(carteira_otimizada.etfs)
+                
+                # Verificar se o DataFrame foi criado corretamente
+                if carteira_df.empty:
+                    print("DataFrame vazio após conversão. Usando dados de fallback.")
+                    carteira_df, metricas = gerar_carteira_simulada()
+                    st.warning("⚠️ Problemas na geração da carteira. Usando dados simulados como fallback.")
+            except Exception as e:
+                print(f"Erro ao converter para DataFrame: {str(e)}")
+                carteira_df, metricas = gerar_carteira_simulada()
+                st.warning("⚠️ Erro ao processar dados da carteira. Usando dados simulados como fallback.")
             
             # Gerar narrativa personalizada
             if debug_mode:
