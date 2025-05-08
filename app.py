@@ -151,7 +151,7 @@ elif st.session_state.nav == "Resultados":
         st.info("Volte para a Home e configure as chaves API para continuar.")
     else:
         try:
-            run_async(show_resultados)
+    run_async(show_resultados) 
         except Exception as e:
             st.error(f"Erro ao carregar a página de resultados: {str(e)}")
             st.error(f"Detalhes: {traceback.format_exc()}")
