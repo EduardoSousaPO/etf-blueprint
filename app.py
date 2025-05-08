@@ -1,4 +1,4 @@
-﻿import streamlit as st
+import streamlit as st
 import sys
 import asyncio
 import os
@@ -140,39 +140,19 @@ def run_async(func):
     return result
 
 # Renderiza a página com base no session_state
-print(f"Navegando para a página: {st.session_state.nav}")
 if st.session_state.nav == "Home":
-    try:
-        print("Renderizando Home")
-        show_home()
-        print("Home renderizada com sucesso")
-    except Exception as e:
-        print(f"ERRO na página Home: {str(e)}")
-        st.error(f"Erro ao carregar a página Home: {str(e)}")
-        st.error(f"Detalhes: {traceback.format_exc()}")
+    show_home()
 elif st.session_state.nav == "Perfil de Risco":
-    try:
-        print("Renderizando Perfil de Risco")
-        show_perfil()
-        print("Perfil de Risco renderizado com sucesso")
-    except Exception as e:
-        print(f"ERRO na página Perfil de Risco: {str(e)}")
-        st.error(f"Erro ao carregar a página de Perfil de Risco: {str(e)}")
-        st.error(f"Detalhes: {traceback.format_exc()}")
+    show_perfil()
 elif st.session_state.nav == "Resultados":
     # Verificar se as chaves API necessárias estão disponíveis antes de mostrar a página de resultados
     if not fmp_api_key or not openai_api_key:
-        print("Chaves de API não encontradas para página de Resultados")
         st.error("⚠️ Chaves de API necessárias não encontradas. Configure o arquivo .env com FMP_API_KEY e OPENAI_API_KEY antes de acessar os resultados.")
         st.info("Volte para a Home e configure as chaves API para continuar.")
     else:
         try:
-            print("Iniciando renderização de Resultados através de run_async")
             run_async(show_resultados)
-            print("Resultados renderizados com sucesso")
         except Exception as e:
-            print(f"ERRO na página Resultados: {str(e)}")
-            print(f"Traceback: {traceback.format_exc()}")
             st.error(f"Erro ao carregar a página de resultados: {str(e)}")
             st.error(f"Detalhes: {traceback.format_exc()}")
             st.info("Recarregue a página ou volte para a Home para continuar.") 
