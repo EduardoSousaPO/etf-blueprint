@@ -206,11 +206,11 @@ def display_results(carteira_df, metricas, narrativa, debug_mode=False):
     # Corrigir o problema com o caractere de escape \n na f-string
     # Primeiro fazer o processamento do texto e depois incluir na f-string
     narrativa_processada = narrativa.replace('    ', '').replace('\n', '<br><br>')
-    st.markdown(f"""
+    st.markdown("""
     <div class="analysis-card">
-        {narrativa_processada}
+        {}
     </div>
-    """, unsafe_allow_html=True)
+    """.format(narrativa_processada), unsafe_allow_html=True)
     
     # Mostrar tabela de alocação
     st.markdown('<h2 class="section-title">Alocação Recomendada</h2>', unsafe_allow_html=True)
