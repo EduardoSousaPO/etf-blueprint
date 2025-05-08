@@ -130,7 +130,35 @@ def show():
         """, unsafe_allow_html=True)
         
     with col2:
-        st.image("assets/investment_chart.png", use_container_width=True)
+        try:
+            print("Tentando carregar imagem: assets/investment_chart.png")
+            import os
+            print(f"Diretório atual: {os.getcwd()}")
+            if os.path.exists("assets/investment_chart.png"):
+                print("Arquivo encontrado, carregando...")
+                st.image("assets/investment_chart.png", use_container_width=True)
+            else:
+                print("Arquivo de imagem não encontrado, mostrando alternativa")
+                st.info("Visualização de exemplo da carteira otimizada")
+                
+                # Criar gráfico com Plotly como alternativa
+                import plotly.express as px
+                import pandas as pd
+                import numpy as np
+                
+                # Dados de exemplo
+                etfs = ["VTI", "VEA", "VWO", "BND", "BNDX"]
+                pesos = [40, 20, 10, 20, 10]
+                
+                # Criar dataframe
+                df = pd.DataFrame({"ETF": etfs, "Peso": pesos})
+                
+                # Criar gráfico de pizza
+                fig = px.pie(df, values="Peso", names="ETF", title="Exemplo de Alocação")
+                st.plotly_chart(fig, use_container_width=True)
+        except Exception as e:
+            print(f"Erro ao carregar imagem: {str(e)}")
+            st.warning("Não foi possível carregar a visualização")
     
     st.markdown('</div>', unsafe_allow_html=True)
     
