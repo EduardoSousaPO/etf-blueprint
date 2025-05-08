@@ -72,6 +72,8 @@ class FMPClient:
         if not self.api_key:
             raise ValueError("FMP API Key não encontrada. Defina FMP_API_KEY ou passe como parâmetro.")
         
+        print(f"FMP Client inicializado")
+        
         # Cache para minimizar chamadas repetidas
         self._cache = {}
         # TTL padrão de 24 horas para cache

@@ -507,9 +507,12 @@ async def show():
     
     # Mostrar narrativa em card redesenhado
     st.markdown('<h2 class="section-title">Análise Personalizada</h2>', unsafe_allow_html=True)
+    # Corrigir o problema com o caractere de escape \n na f-string
+    # Primeiro fazer o processamento do texto e depois incluir na f-string
+    narrativa_processada = narrativa.replace('    ', '').replace('\n', '<br><br>')
     st.markdown(f"""
     <div class="analysis-card">
-        {narrativa.replace('    ', '').replace('\n', '<br><br>')}
+        {narrativa_processada}
     </div>
     """, unsafe_allow_html=True)
     

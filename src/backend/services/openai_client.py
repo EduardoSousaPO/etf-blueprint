@@ -26,6 +26,8 @@ class NarratorService:
         if not self.api_key:
             raise ValueError("OpenAI API Key não encontrada. Defina OPENAI_API_KEY ou passe como parâmetro.")
         
+        print("NarratorService inicializado")
+        
         self.model = model
     
     async def generate_narrative(

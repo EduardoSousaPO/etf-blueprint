@@ -4,6 +4,7 @@ import asyncio
 import os
 from pathlib import Path
 from dotenv import load_dotenv
+import traceback
 
 # Carregar variáveis de ambiente do arquivo .env com tratamento de erros
 try:
@@ -17,8 +18,15 @@ except Exception as e:
 fmp_api_key = os.getenv("FMP_API_KEY")
 openai_api_key = os.getenv("OPENAI_API_KEY")
 
+# Verificar se estamos no ambiente Streamlit Cloud
+is_streamlit_cloud = os.getenv("IS_STREAMLIT_CLOUD") == "true"
+
+# Desativar o modo de demonstração - usar apenas dados reais
+st.session_state.demo_mode = False
+
+# Verificar se as chaves API estão disponíveis
 if not fmp_api_key or not openai_api_key:
-    st.warning("Variáveis de ambiente não encontradas. Para executar o aplicativo completamente, configure o arquivo .env")
+    st.error("⚠️ Chaves de API necessárias não encontradas. Configure o arquivo .env com FMP_API_KEY e OPENAI_API_KEY.")
     print(f"FMP_API_KEY: {'Encontrada' if fmp_api_key else 'Não encontrada'}")
     print(f"OPENAI_API_KEY: {'Encontrada' if openai_api_key else 'Não encontrada'}")
 
@@ -98,7 +106,6 @@ try:
         st.query_params.clear()
 except Exception as e:
     print(f"ERRO ao acessar query_params: {str(e)}")
-    st.warning(f"Erro ao processar parâmetros de URL: {e}")
     # Se não for possível acessar query_params, continuar com a navegação padrão
     pass
 
@@ -138,4 +145,14 @@ if st.session_state.nav == "Home":
 elif st.session_state.nav == "Perfil de Risco":
     show_perfil()
 elif st.session_state.nav == "Resultados":
+    # Verificar se as chaves API necessárias estão disponíveis antes de mostrar a página de resultados
+    if not fmp_api_key or not openai_api_key:
+        st.error("⚠️ Chaves de API necessárias não encontradas. Configure o arquivo .env com FMP_API_KEY e OPENAI_API_KEY antes de acessar os resultados.")
+        st.info("Volte para a Home e configure as chaves API para continuar.")
+    else:
+        try:
     run_async(show_resultados) 
+        except Exception as e:
+            st.error(f"Erro ao carregar a página de resultados: {str(e)}")
+            st.error(f"Detalhes: {traceback.format_exc()}")
+            st.info("Recarregue a página ou volte para a Home para continuar.") 
