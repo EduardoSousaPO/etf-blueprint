@@ -172,37 +172,41 @@ def display_results(carteira_df, metricas, narrativa, debug_mode=False):
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        st.markdown(f"""
+        metric_template = """
         <div class="metric-card">
             <div class="metric-title">Retorno Esperado</div>
-            <div class="metric-value">{metricas['retorno_esperado']:.2f}%</div>
+            <div class="metric-value">{:.2f}%</div>
         </div>
-        """, unsafe_allow_html=True)
+        """
+        st.markdown(metric_template.format(metricas['retorno_esperado']), unsafe_allow_html=True)
     
     with col2:
-        st.markdown(f"""
+        metric_template = """
         <div class="metric-card">
             <div class="metric-title">Volatilidade</div>
-            <div class="metric-value">{metricas['volatilidade']:.2f}%</div>
+            <div class="metric-value">{:.2f}%</div>
         </div>
-        """, unsafe_allow_html=True)
+        """
+        st.markdown(metric_template.format(metricas['volatilidade']), unsafe_allow_html=True)
     
     with col3:
-        st.markdown(f"""
+        metric_template = """
         <div class="metric-card">
             <div class="metric-title">Índice Sharpe</div>
-            <div class="metric-value">{metricas['sharpe_ratio']:.2f}</div>
+            <div class="metric-value">{:.2f}</div>
         </div>
-        """, unsafe_allow_html=True)
+        """
+        st.markdown(metric_template.format(metricas['sharpe_ratio']), unsafe_allow_html=True)
     
     with col4:
         drawdown_class = "negative" if metricas['max_drawdown'] < 0 else ""
-        st.markdown(f"""
+        metric_template = """
         <div class="metric-card">
             <div class="metric-title">Drawdown Máximo</div>
-            <div class="metric-value {drawdown_class}">{metricas['max_drawdown']:.2f}%</div>
+            <div class="metric-value {}">{:.2f}%</div>
         </div>
-        """, unsafe_allow_html=True)
+        """
+        st.markdown(metric_template.format(drawdown_class, metricas['max_drawdown']), unsafe_allow_html=True)
     
     # Mostrar narrativa em card redesenhado
     st.markdown('<h2 class="section-title">Análise Personalizada</h2>', unsafe_allow_html=True)
@@ -475,7 +479,7 @@ async def show():
     print("Início da função show() em resultados.py")
     
     # Adicionando estilos CSS personalizados
-    st.markdown("""
+    css_styles = """
     <style>
         /* Estilo geral */
         .results-page {
@@ -590,7 +594,8 @@ async def show():
             background-color: #4361EE;
         }
     </style>
-    """, unsafe_allow_html=True)
+    """
+    st.markdown(css_styles, unsafe_allow_html=True)
     
     st.markdown('<div class="results-page">', unsafe_allow_html=True)
     st.title("Resultados - Sua Carteira Otimizada")
