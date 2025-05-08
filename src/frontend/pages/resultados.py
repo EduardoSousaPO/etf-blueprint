@@ -269,7 +269,7 @@ def display_results(carteira_df, metricas, narrativa, debug_mode=False):
     tabela_exibicao = tabela_exibicao.rename(columns=colunas_para_renomear)
     
     # Exibir tabela com Streamlit
-    st.dataframe(tabela_exibicao, use_container_width=True)
+    st.dataframe(tabela_exibicao)
     
     try:
         # Gráficos lado a lado
@@ -300,7 +300,7 @@ def display_results(carteira_df, metricas, narrativa, debug_mode=False):
                 margin=dict(t=50, b=20, l=20, r=20),
                 paper_bgcolor='white'
             )
-            st.plotly_chart(fig_pizza, use_container_width=True)
+            st.plotly_chart(fig_pizza)
         
         # Gráfico de fronteira eficiente
         with col2:
@@ -367,7 +367,7 @@ def display_results(carteira_df, metricas, narrativa, debug_mode=False):
                 paper_bgcolor='white'
             )
             
-            st.plotly_chart(fig_frontier, use_container_width=True)
+            st.plotly_chart(fig_frontier)
         
         # Tentar exibir gráfico de barras por categoria, se houver a coluna 'categoria'
         if 'categoria' in carteira_df.columns:
@@ -394,7 +394,7 @@ def display_results(carteira_df, metricas, narrativa, debug_mode=False):
                 paper_bgcolor='white'
             )
             
-            st.plotly_chart(fig_categoria, use_container_width=True)
+            st.plotly_chart(fig_categoria)
     except Exception as e:
         print(f"Erro ao renderizar gráficos: {str(e)}")
         st.warning("Não foi possível gerar todas as visualizações")
