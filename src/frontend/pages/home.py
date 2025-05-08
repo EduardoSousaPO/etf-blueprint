@@ -136,7 +136,7 @@ def show():
             print(f"Diretório atual: {os.getcwd()}")
             if os.path.exists("assets/investment_chart.png"):
                 print("Arquivo encontrado, carregando...")
-                st.image("assets/investment_chart.png", use_container_width=True)
+                st.image("assets/investment_chart.png")
             else:
                 print("Arquivo de imagem não encontrado, mostrando alternativa")
                 st.info("Visualização de exemplo da carteira otimizada")
@@ -155,7 +155,7 @@ def show():
                 
                 # Criar gráfico de pizza
                 fig = px.pie(df, values="Peso", names="ETF", title="Exemplo de Alocação")
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig)
         except Exception as e:
             print(f"Erro ao carregar imagem: {str(e)}")
             st.warning("Não foi possível carregar a visualização")
