@@ -165,13 +165,20 @@ def show():
     # Botão de Call-to-Action
     st.markdown('<div class="cta-section">', unsafe_allow_html=True)
     st.markdown('<h2 style="margin-bottom: 20px; color: #121A3E;">Pronto para otimizar seus investimentos?</h2>', unsafe_allow_html=True)
-    btn_comecar = st.button("Começar agora", type="primary", key="btn_comecar")
+    
+    # Adicionando um botão principal e um link alternativo para garantir navegação
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        if st.button("Começar agora", type="primary", key="btn_comecar"):
+            # Definir diretamente a navegação sem mecanismos complexos
+            st.session_state.nav = "Perfil de Risco"
+            st.toast("Redirecionando para página de perfil...")
+    
+    with col2:
+        # Link alternativo como backup para garantir navegação
+        st.markdown('<a href="?nav=perfil" target="_self" style="text-decoration: none;"><button style="background-color: #4361EE; color: white; border: none; padding: 10px 15px; border-radius: 5px; cursor: pointer;">Ir para perfil</button></a>', unsafe_allow_html=True)
+    
     st.markdown('</div>', unsafe_allow_html=True)
-    if btn_comecar:
-        # Simplificação direta sem reimportar streamlit
-        st.session_state["nav"] = "Perfil de Risco"
-        # Usando session_state para guardar que queremos navegar
-        st.session_state["navigate_to_perfil"] = True
     
     # Recursos em cards
     st.subheader("Por que usar o ETF Blueprint?")

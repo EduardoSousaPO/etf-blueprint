@@ -98,11 +98,18 @@ try:
     
     if query_params_existe:
         try:
+            # Verificar tanto "page" quanto "nav" como parâmetros de URL
             page = st.query_params.get("page", "")
+            nav_param = st.query_params.get("nav", "")
+            
             print(f"Parâmetro page encontrado: {page}")
-            if page == "perfil":
+            print(f"Parâmetro nav encontrado: {nav_param}")
+            
+            if page == "perfil" or nav_param == "perfil":
+                print("Navegando para Perfil de Risco")
                 st.session_state.nav = "Perfil de Risco"
-            elif page == "resultados":
+            elif page == "resultados" or nav_param == "resultados":
+                print("Navegando para Resultados")
                 st.session_state.nav = "Resultados"
             # Limpar os parâmetros após uso
             try:
@@ -160,12 +167,6 @@ def run_async(func):
 # Renderiza a página com base no session_state
 if st.session_state.nav == "Home":
     show_home()
-    # Verificar se precisamos navegar para a página de perfil após o clique no botão
-    if st.session_state.get("navigate_to_perfil", False):
-        # Limpar a flag de navegação
-        st.session_state.pop("navigate_to_perfil", None)
-        # Fazer o rerun para atualizar a navegação
-        st.rerun()
 elif st.session_state.nav == "Perfil de Risco":
     show_perfil()
 elif st.session_state.nav == "Resultados":
