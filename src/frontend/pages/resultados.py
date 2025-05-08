@@ -91,28 +91,31 @@ def gerar_narrativa_simulada(perfil, carteira, metricas):
     Gera uma narrativa simulada para demonstração
     Será substituída pela implementação real com OpenAI
     """
-    return f"""
-    Com base no seu perfil {perfil['perfil_risco']} e horizonte de {perfil['horizonte']} anos, 
-    desenvolvemos uma carteira diversificada globalmente com foco em crescimento sustentável e proteção.
+    # Construir o texto sem usar f-string com quebras de linha
+    texto = []
+    texto.append(f"Com base no seu perfil {perfil['perfil_risco']} e horizonte de {perfil['horizonte']} anos,")
+    texto.append("desenvolvemos uma carteira diversificada globalmente com foco em crescimento sustentável e proteção.")
+    texto.append("")
+    texto.append(f"Sua carteira tem um retorno esperado de {metricas['retorno_esperado']}% ao ano,")
+    texto.append(f"com volatilidade estimada de {metricas['volatilidade']}%.")
+    texto.append(f"O índice Sharpe, que mede o retorno ajustado ao risco, é de {metricas['sharpe_ratio']}.")
+    texto.append("")
+    texto.append(f"A maior alocação está em VTI ({carteira.iloc[0]['peso']}%), que oferece ampla exposição")
+    texto.append("ao mercado de ações dos EUA. Para diversificação internacional, recomendamos")
+    texto.append(f"VEA ({carteira.iloc[1]['peso']}%) e VWO ({carteira.iloc[2]['peso']}%).")
+    texto.append("")
+    texto.append(f"A parcela defensiva inclui BND ({carteira.iloc[3]['peso']}%) e BNDX ({carteira.iloc[4]['peso']}%),")
+    texto.append("que proporcionam estabilidade e rendimento.")
+    texto.append("")
+    texto.append(f"Com um horizonte de {perfil['horizonte']} anos, esta carteira está bem posicionada para")
+    texto.append(f"atender seu objetivo de retorno de {perfil['retorno_alvo']}% com um nível de risco adequado")
+    texto.append(f"ao seu perfil {perfil['perfil_risco']}.")
+    texto.append("")
+    texto.append("Recomendamos revisar esta alocação anualmente ou quando houver mudanças significativas")
+    texto.append("em seus objetivos financeiros.")
     
-    Sua carteira tem um retorno esperado de {metricas['retorno_esperado']}% ao ano, 
-    com volatilidade estimada de {metricas['volatilidade']}%. 
-    O índice Sharpe, que mede o retorno ajustado ao risco, é de {metricas['sharpe_ratio']}.
-    
-    A maior alocação está em VTI ({carteira.iloc[0]['peso']}%), que oferece ampla exposição 
-    ao mercado de ações dos EUA. Para diversificação internacional, recomendamos 
-    VEA ({carteira.iloc[1]['peso']}%) e VWO ({carteira.iloc[2]['peso']}%).
-    
-    A parcela defensiva inclui BND ({carteira.iloc[3]['peso']}%) e BNDX ({carteira.iloc[4]['peso']}%), 
-    que proporcionam estabilidade e rendimento.
-    
-    Com um horizonte de {perfil['horizonte']} anos, esta carteira está bem posicionada para 
-    atender seu objetivo de retorno de {perfil['retorno_alvo']}% com um nível de risco adequado 
-    ao seu perfil {perfil['perfil_risco']}.
-    
-    Recomendamos revisar esta alocação anualmente ou quando houver mudanças significativas 
-    em seus objetivos financeiros.
-    """
+    # Juntar tudo com quebras de linha
+    return "\n".join(texto)
 
 def gerar_fronteira_eficiente_simulada():
     """
@@ -210,7 +213,9 @@ def display_results(carteira_df, metricas, narrativa, debug_mode=False):
         if not isinstance(narrativa, str):
             narrativa = str(narrativa) if narrativa is not None else "Análise não disponível no momento."
             
-        narrativa_processada = narrativa.replace('    ', '').replace('\n', '<br><br>')
+        # Substituir o uso direto de \n por uma variável
+        quebra_linha = '\n'
+        narrativa_processada = narrativa.replace('    ', '').replace(quebra_linha, '<br><br>')
         st.markdown("""
         <div class="analysis-card">
             {}
@@ -883,16 +888,18 @@ async def show():
                     st.sidebar.write(f"Narrativa gerada em {duration:.2f} segundos.")
             except Exception as e:
                 print(f"Erro ao gerar narrativa: {str(e)}")
-                narrativa = f"""
-                Com base no seu perfil {perfil.get('perfil_risco', 'de investidor')} e horizonte de {perfil.get('horizonte', 'longo')} anos, 
-                desenvolvemos uma carteira diversificada globalmente com foco em crescimento sustentável e proteção.
+                # Criar narrativa com abordagem segura sem multi-line f-string
+                texto_narrativa = []
+                texto_narrativa.append(f"Com base no seu perfil {perfil.get('perfil_risco', 'de investidor')} e horizonte de {perfil.get('horizonte', 'longo')} anos,")
+                texto_narrativa.append("desenvolvemos uma carteira diversificada globalmente com foco em crescimento sustentável e proteção.")
+                texto_narrativa.append("")
+                texto_narrativa.append(f"Esta carteira tem um retorno esperado de {carteira_otimizada.retorno_esperado:.2f}% ao ano")
+                texto_narrativa.append(f"com volatilidade estimada de {carteira_otimizada.volatilidade:.2f}%.")
+                texto_narrativa.append("")
+                texto_narrativa.append("Recomendamos revisar esta alocação anualmente ou quando houver mudanças significativas")
+                texto_narrativa.append("em seus objetivos financeiros.")
                 
-                Esta carteira tem um retorno esperado de {carteira_otimizada.retorno_esperado:.2f}% ao ano 
-                com volatilidade estimada de {carteira_otimizada.volatilidade:.2f}%.
-                
-                Recomendamos revisar esta alocação anualmente ou quando houver mudanças significativas 
-                em seus objetivos financeiros.
-                """
+                narrativa = "\n".join(texto_narrativa)
                 st.warning("Não foi possível gerar a análise detalhada. Mostrando narrativa simplificada.")
             
             # Metricas da carteira
