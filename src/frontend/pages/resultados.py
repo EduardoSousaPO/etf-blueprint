@@ -415,38 +415,24 @@ def display_results(carteira_df, metricas, narrativa, debug_mode=False):
                         print("Iniciando geração do PDF...")
                         
                         # Gerar o PDF
-                        if 'carteira_otimizada' in locals():
-                            # Obter perfil diretamente da sessão para evitar erro
-                            perfil_pdf = st.session_state.get("perfil", {
-                                'perfil_risco': 'Moderado',
-                                'horizonte': 10,
-                                'retorno_alvo': metricas['retorno_esperado'],
-                                'tolerancia_drawdown_numeric': metricas['max_drawdown']
-                            })
-                            pdf_bytes = pdf_gen.generate(perfil_pdf, carteira_otimizada, metricas, narrativa)
-                        else:
-                            # Caso onde estamos usando dados simulados
-                            from types import SimpleNamespace
-                            carteira_obj = SimpleNamespace()
-                            carteira_obj.etfs = carteira_df.to_dict('records')
-                            carteira_obj.retorno_esperado = metricas['retorno_esperado']
-                            carteira_obj.volatilidade = metricas['volatilidade']
-                            carteira_obj.sharpe_ratio = metricas['sharpe_ratio']
-                            carteira_obj.max_drawdown = metricas['max_drawdown']
-                            
-                            # Verificar se o perfil existe e criar um perfil padrão se necessário
-                            if 'perfil' not in globals() and 'perfil' not in locals():
-                                print("Perfil não encontrado, criando perfil padrão para o PDF")
-                                perfil_pdf = {
-                                    'perfil_risco': 'Moderado',
-                                    'horizonte': 10,
-                                    'retorno_alvo': metricas['retorno_esperado'],
-                                    'tolerancia_drawdown_numeric': metricas['max_drawdown']
-                                }
-                            else:
-                                perfil_pdf = perfil
-                            
-                            pdf_bytes = pdf_gen.generate(perfil_pdf, carteira_obj, metricas, narrativa)
+                        # Criar objeto de carteira simulada em todos os casos
+                        from types import SimpleNamespace
+                        carteira_obj = SimpleNamespace()
+                        carteira_obj.etfs = carteira_df.to_dict('records')
+                        carteira_obj.retorno_esperado = metricas['retorno_esperado']
+                        carteira_obj.volatilidade = metricas['volatilidade']
+                        carteira_obj.sharpe_ratio = metricas['sharpe_ratio']
+                        carteira_obj.max_drawdown = metricas['max_drawdown']
+                        
+                        # Obter perfil diretamente da sessão para evitar erro
+                        perfil_pdf = st.session_state.get("perfil", {
+                            'perfil_risco': 'Moderado',
+                            'horizonte': 10,
+                            'retorno_alvo': metricas['retorno_esperado'],
+                            'tolerancia_drawdown_numeric': metricas['max_drawdown']
+                        })
+                        
+                        pdf_bytes = pdf_gen.generate(perfil_pdf, carteira_obj, metricas, narrativa)
                         
                         # Codificar para base64 para download
                         b64 = base64.b64encode(pdf_bytes).decode()
