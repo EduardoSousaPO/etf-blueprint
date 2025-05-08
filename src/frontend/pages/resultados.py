@@ -416,7 +416,9 @@ def display_results(carteira_df, metricas, narrativa, debug_mode=False):
                         
                         # Gerar o PDF
                         if 'perfil' in locals() and 'carteira_otimizada' in locals():
-                            pdf_bytes = pdf_gen.generate(perfil, carteira_otimizada, metricas, narrativa)
+                            # Criar referência segura para perfil
+                            perfil_pdf = perfil
+                            pdf_bytes = pdf_gen.generate(perfil_pdf, carteira_otimizada, metricas, narrativa)
                         else:
                             # Caso onde estamos usando dados simulados
                             from types import SimpleNamespace
