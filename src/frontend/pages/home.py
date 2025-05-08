@@ -165,16 +165,20 @@ def show():
     # Botão de Call-to-Action
     st.markdown('<div class="cta-section">', unsafe_allow_html=True)
     st.markdown('<h2 style="margin-bottom: 20px; color: #121A3E;">Pronto para otimizar seus investimentos?</h2>', unsafe_allow_html=True)
-    btn_comecar = st.button("Começar agora", type="primary", use_container_width=True, key="btn_comecar")
+    btn_comecar = st.button("Começar agora", type="primary", key="btn_comecar")
     st.markdown('</div>', unsafe_allow_html=True)
     if btn_comecar:
         st.session_state["nav"] = "Perfil de Risco"
         try:
-            st.query_params["page"] = "perfil"
+            # Forma antiga mais compatível de redirecionamento
+            import streamlit as st
+            st.session_state["nav"] = "Perfil de Risco"
+            st.experimental_rerun()
         except Exception as e:
-            # Se não conseguir definir os parâmetros de URL, continuar sem eles
-            pass
-        st.rerun()
+            print(f"Erro ao navegar: {str(e)}")
+            # Fallback básico
+            st.success("Redirecionando para página de perfil...")
+            st.session_state["nav"] = "Perfil de Risco"
     
     # Recursos em cards
     st.subheader("Por que usar o ETF Blueprint?")

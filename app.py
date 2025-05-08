@@ -92,18 +92,25 @@ if 'nav' not in st.session_state:
 # Verifica parâmetros de URL para navegação
 try:
     print("Tentando acessar query_params")
-    query_params_existe = hasattr(st, 'query_params')
+    # Método mais seguro para verificar se o recurso está disponível
+    query_params_existe = 'query_params' in dir(st)
     print(f"query_params existe? {query_params_existe}")
     
-    if query_params_existe and "page" in st.query_params:
-        page = st.query_params["page"].lower()
-        print(f"Parâmetro page encontrado: {page}")
-        if page == "perfil":
-            st.session_state.nav = "Perfil de Risco"
-        elif page == "resultados":
-            st.session_state.nav = "Resultados"
-        # Limpar os parâmetros após uso
-        st.query_params.clear()
+    if query_params_existe:
+        try:
+            page = st.query_params.get("page", "")
+            print(f"Parâmetro page encontrado: {page}")
+            if page == "perfil":
+                st.session_state.nav = "Perfil de Risco"
+            elif page == "resultados":
+                st.session_state.nav = "Resultados"
+            # Limpar os parâmetros após uso
+            try:
+                st.query_params.clear()
+            except:
+                pass
+        except Exception as e:
+            print(f"Erro ao processar query_params: {str(e)}")
 except Exception as e:
     print(f"ERRO ao acessar query_params: {str(e)}")
     # Se não for possível acessar query_params, continuar com a navegação padrão
@@ -119,17 +126,28 @@ st.sidebar.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
+# Detectar índice atual de forma segura
+try:
+    current_index = ["Home", "Perfil de Risco", "Resultados"].index(st.session_state.nav)
+except:
+    current_index = 0
+    st.session_state.nav = "Home"
+
 opcao = st.sidebar.radio(
     "Navegação",
     ["Home", "Perfil de Risco", "Resultados"],
     key="sidebar_nav",
-    index=["Home", "Perfil de Risco", "Resultados"].index(st.session_state.nav)
+    index=current_index
 )
 
 # Atualiza o session_state quando a navegação é alterada pelo sidebar
 if opcao != st.session_state.nav:
     st.session_state.nav = opcao
-    st.rerun()
+    # Usar try/except para maior compatibilidade
+    try:
+        st.experimental_rerun()
+    except:
+        st.rerun()
 
 # Função para executar tarefas assíncronas
 def run_async(func):
