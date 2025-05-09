@@ -8,27 +8,34 @@ ETF Blueprint é uma ferramenta que permite aos investidores criar carteiras de 
 
 ## Funcionalidades
 
-- 📊 Otimização de carteira baseada em retorno esperado, volatilidade e drawdown
-- 🧠 Análise personalizada com narrativa gerada por IA
-- 📈 Visualização da fronteira eficiente e comparação com diferentes alocações
+- 📊 Otimização de carteira baseada em retorno esperado, volatilidade e sharpe ratio
+- 🎯 Criação de carteira otimizada de exatos 10 ETFs com alocação entre 4% e 20% por ativo
+- 🧠 Análise personalizada com narrativa gerada por IA (OpenAI API)
+- 📈 Visualização com gráficos Plotly interativos
 - 📄 Geração de relatório PDF detalhado
 - 💼 Exportação dos dados em CSV para implementação em corretoras
 
 ## Tecnologias
 
-- Python 3.8+
+- Python 3.9+
 - Streamlit (frontend)
 - Financial Modeling Prep API (dados financeiros)
-- Biblioteca Scipy/Numpy (otimização de portfólios)
+- PyPortfolioOpt (otimização de portfólios)
 - OpenAI API (geração de narrativas personalizadas)
-- Matplotlib/Plotly (visualizações)
-- ReportLab (geração de PDF)
+- Plotly (visualizações)
+- WeasyPrint (geração de PDF)
 
-## Instalação
+## Requisitos
+
+- Python 3.9+
+- API Key da Financial Modeling Prep (FMP)
+- API Key da OpenAI
+
+## Configuração
 
 1. Clone o repositório:
 ```bash
-git clone https://github.com/EduardoSousaPO/etf-blueprint.git
+git clone https://github.com/seu-usuario/etf-blueprint.git
 cd etf-blueprint
 ```
 
@@ -37,27 +44,53 @@ cd etf-blueprint
 pip install -r requirements.txt
 ```
 
-3. Configure as variáveis de ambiente (ou crie um arquivo .env):
+3. Configure as variáveis de ambiente:
+
+Crie um arquivo `.env` na raiz do projeto com as seguintes variáveis:
 ```
-FMP_API_KEY=sua_chave_api_fmp
-OPENAI_API_KEY=sua_chave_api_openai
+FMP_API_KEY=sua_chave_fmp_api
+OPENAI_API_KEY=sua_chave_openai_api
 ```
 
-4. Execute a aplicação:
+Alternativamente, no Streamlit Cloud, adicione essas chaves em Secrets.
+
+## Execução Local
+
 ```bash
-streamlit run app.py
+streamlit run streamlit_app.py
 ```
 
-## Uso
+## Deploy no Streamlit Cloud
 
-1. Acesse a interface web (http://localhost:8501 por padrão)
-2. Preencha seu perfil de risco e objetivos financeiros
-3. Receba sua carteira otimizada com análise detalhada
-4. Baixe o relatório ou exporte os dados para implementação
+1. Faça fork deste repositório para sua conta GitHub
+2. Acesse [streamlit.io/cloud](https://streamlit.io/cloud) e faça login
+3. Clique em "New app" e selecione o repositório
+4. Configure as seguintes opções:
+   - Main file path: `streamlit_app.py`
+   - Python version: 3.9+
+5. Configure os Secrets com suas chaves de API:
+```toml
+FMP_API_KEY = "sua_chave_fmp_api"
+OPENAI_API_KEY = "sua_chave_openai_api"
+```
+6. Clique em "Deploy!"
+
+## Estrutura do Projeto
+
+- `streamlit_app.py`: Aplicativo principal em página única
+- `backend/services/`: Serviços para obtenção de dados, otimização e análise
+  - `fmp_service.py`: Cliente para API da Financial Modeling Prep
+  - `optimizer.py`: Lógica de otimização de carteiras
+  - `openai_service.py`: Cliente para API da OpenAI
+- `utils/`: Utilitários
+  - `pdf_report.py`: Geração de relatórios em PDF
+- `tests/`: Testes automatizados
+- `requirements.txt`: Dependências do projeto
+- `.streamlit/`: Configurações do Streamlit
 
 ## Licença
 
-MIT License
+Este projeto está licenciado sob a licença MIT - veja o arquivo LICENSE para detalhes.
 
 ## Contato
 
