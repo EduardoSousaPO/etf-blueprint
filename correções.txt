@@ -1,0 +1,202 @@
+Você, **Cursor.ai**, é o "dev-squad" responsável por **FINALIZAR e SANEAR** o repositório **etf-blueprint** (link GitHub no workspace).  
+Objetivo: entregar um **app Streamlit Cloud estável em página única** que:
+
+1. Coleta perfil de investidor (horizonte, tolerância, retorno-alvo + escolha de universo: "Só BR", "Só EUA", "Ambos").  
+2. Gera carteira otimizada de **exatos 10 ETFs**, cada um entre **4 % – 20 %**, usando dados da **FMP API** + **PyPortfolioOpt**.  
+3. Cria análise textual com a **OpenAI API**.  
+4. Exibe tabela, gráficos Plotly e permite download em **CSV** e **PDF**.  
+5. Faz deploy sem erros no **Streamlit Community Cloud**.
+
+Todas as recomendações vêm do diagnóstico  
+*"Correção do Projeto ETF Blueprint para Deploy no Streamlit Cloud"*.
+
+---
+
+# ========== TAREFAS DETALHADAS ==========
+
+## 1 · Estrutura & Navegação
+* Consolidar tudo em **`streamlit_app.py`** (página única).  
+* Controlar fluxo com `st.session_state['stage']  # "input" | "result"`.  
+* Remover páginas antigas (`pages/`, `home.py`) e qualquer `st.experimental_rerun` ou query-params.
+
+## 2 · Configuração Inicial
+
+```python
+import streamlit as st
+st.set_page_config(page_title="ETF Blueprint",
+                   page_icon="📈",
+                   layout="wide")
+```
+Apenas UMA vez no topo do script.
+
+## 3 · Formulário de Perfil
+
+| Campo            | Widget                                                           |
+| ---------------- | ---------------------------------------------------------------- |
+| Perfil de Risco  | `st.selectbox("Perfil", ["Conservador","Moderado","Agressivo"])` |
+| Horizonte (anos) | `st.number_input(...)`                                           |
+| Drawdown Máx (%) | `st.slider(...)`                                                 |
+| Universo         | `st.radio("ETFs", ["BR","EUA","Ambos"])`                         |
+| Botão            | `st.form_submit_button("Gerar Carteira")`                        |
+
+
+Gravar resultado em st.session_state.perfil.
+
+
+## 4 · Universos de Ativos
+
+```python
+ETFS_EUA = [...]       # lista de 50 tickers
+ETFS_BR  = [...]       # lista b3_etfs completa
+def filtrar_universo(opcao):
+    if opcao=="BR":   return ETFS_BR
+    if opcao=="EUA":  return ETFS_EUA
+    return ETFS_BR + ETFS_EUA
+```
+
+## 5 · Obtenção de Dados (FMP)
+backend/services/fmp_service.py
+
+
+```python
+def get_prices(tickers:list, years:int=5)->pd.DataFrame:
+    # usa endpoint /historical-price-full/{symbol}
+    # cache em st.session_state["prices_cache"]
+```
+
+
+## 6 · Otimização
+backend/services/optimizer.py
+
+```python
+from pypfopt import EfficientFrontier
+def otimizar(tickers, perfil):
+    mu, S = estimar_retornos_cov(tickers)
+    ef = EfficientFrontier(mu, S)
+    ef.add_constraint(lambda w: w>=0.04)
+    ef.add_constraint(lambda w: w<=0.20)
+    if perfil=="Conservador":
+        ef.min_volatility()
+    elif perfil=="Moderado":
+        ef.max_sharpe()
+    else:
+        ef.efficient_risk(target_risk=0.20)
+    pesos = ef.clean_weights()
+    top10 = dict(sorted(pesos.items(), key=lambda x:x[1], reverse=True)[:10])
+    total = sum(top10.values())
+    top10 = {k:v/total for k,v in top10.items()}
+    return top10, ef.portfolio_performance(verbose=False)
+```
+## 7 · Análise IA (OpenAI)
+backend/services/openai_service.py
+
+```python
+def gerar_texto(carteira, perfil):
+    prompt = f"""
+    Você é analista. Explique esta carteira de 10 ETFs {carteira}
+    para um investidor {perfil}, em até 400 palavras, em português simples.
+    """
+    resp = openai.ChatCompletion.create(
+        model="gpt-3.5-turbo",
+        messages=[{"role":"user","content":prompt}],
+        temperature=0.2
+    )
+    return resp.choices[0].message.content.strip()
+```
+
+## 8 · Visualização
+st.success("Carteira otimizada!")
+
+st.dataframe(df_aloc, height=300) (sem use_container_width)
+
+Plotly pie + fronteira.
+
+Guardar resultado em st.session_state.portfolio_result.
+
+## 9 · Exportação
+```python
+st.download_button("Baixar CSV",
+                   df_aloc.to_csv(index=False).encode(),
+                   "carteira.csv",
+                   "text/csv")
+```
+
+PDF
+utils/pdf_report.py
+HTML → WeasyPrint → bytes → st.download_button("Baixar PDF", ...).
+
+
+## 10 · Configuração & Dependências
+.streamlit/config.toml
+
+```
+[server]
+fileWatcherType = "none"
+```
+
+
+requirements.txt
+
+```
+makefile
+Copiar
+Editar
+streamlit==1.28.0
+pandas
+numpy
+pypfopt
+plotly
+openai
+requests
+weasyprint
+```
+
+
+Adicionar OPENAI_API_KEY e FMP_API_KEY em Secrets do Cloud.
+
+
+## 11 · Qualidade & Teste
+ruff + black format.
+
+Tests (pytest):
+
+test_optimizer.py – verifica 10 ativos, soma=1, limites 0.04-0.20.
+
+Local run → streamlit run streamlit_app.py – fluxo completo.
+
+Push → Streamlit Cloud build → logs limpos, app funcional.
+
+## 12 · Entregáveis
+Branch fix/cloud_deploy com:
+
+streamlit_app.py
+
+backend/services/*.py
+
+utils/pdf_report.py
+
+.streamlit/config.toml
+
+requirements.txt
+
+tests/
+
+PR + checklist: App roda local & Cloud, CSV/PDF OK, testes ≥90 %.
+
+
+## CHECAGEM DE QUALIDADE
+
+ruff . e black --check . passam.
+
+pytest -q verde.
+
+streamlit run streamlit_app.py sem tracebacks.
+
+Deploy no Cloud sem erros de inotify, sem use_container_width crash.
+
+Fluxo completo: perfil → carteira → gráficos → CSV/PDF ok.
+
+START
+
+Crie a branch fix/cloud_deploy e execute as tarefas na ordem.
+Peça confirmação somente se algum requisito estiver ambíguo.
