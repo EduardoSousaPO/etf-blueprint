@@ -1,10 +1,11 @@
 streamlit==1.28.0
 pandas
 numpy
-pypfopt
+git+https://github.com/robertmartin8/PyPortfolioOpt
 plotly
 openai
 requests
 weasyprint
 python-dotenv
 matplotlib
+scipy

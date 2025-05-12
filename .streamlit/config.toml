@@ -13,4 +13,8 @@ enableXsrfProtection = true
 fileWatcherType = "none"
 
 [browser]
-gatherUsageStats = false 
+gatherUsageStats = false
+
+[runner]
+# Solicitar Python 3.9 (versão compatível com pypfopt)
+pythonVersion = "3.9" 
