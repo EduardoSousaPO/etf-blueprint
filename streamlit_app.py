@@ -692,11 +692,11 @@ if __name__ == "__main__":
                 
                 # Selecionar ETFs com base no universo escolhido
                 if universo == "BR":
-                    etfs = ETFs_BR
+                    etfs = ETFS_BR
                 elif universo == "EUA":
-                    etfs = ETFs_EUA
+                    etfs = ETFS_EUA
                 else:
-                    etfs = ETFs_BR + ETFs_EUA
+                    etfs = ETFS_BR + ETFS_EUA
                 
                 # Processar dados e otimizar carteira
                 try:
@@ -810,11 +810,11 @@ if __name__ == "__main__":
             else:
                 # Selecionar ETFs com base no universo escolhido
                 if universo == "BR":
-                    etfs = ETFs_BR
+                    etfs = ETFS_BR
                 elif universo == "EUA":
-                    etfs = ETFs_EUA
+                    etfs = ETFS_EUA
                 else:
-                    etfs = ETFs_BR + ETFs_EUA
+                    etfs = ETFS_BR + ETFS_EUA
                 # Obter dados de preço
                 prices_df = get_prices(etfs)
                 # Guardar para uso futuro
