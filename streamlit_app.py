@@ -164,7 +164,25 @@ def otimizar(tickers, perfil, prices_df=None):
     try:
         # Calcular retornos e matriz de covariância
         returns = prices_df.pct_change().dropna()
-        mu = returns.mean() * 252
+        
+        # Aplicar winsorization para remover outliers extremos
+        # Isso ajuda a melhorar a estabilidade do modelo
+        winsor_returns = returns.copy()
+        for col in winsor_returns.columns:
+            winsor_returns[col] = winsor_returns[col].clip(
+                lower=winsor_returns[col].quantile(0.05),
+                upper=winsor_returns[col].quantile(0.95)
+            )
+            
+        # Usar retornos mais estáveis para cálculo de médias
+        mu = winsor_returns.mean() * 252
+        
+        # Garantir que todos os retornos médios são positivos para ETFs
+        # com um ajuste mínimo para evitar retornos negativos
+        min_expected_return = 0.02  # 2% como retorno mínimo esperado
+        mu = np.maximum(mu, min_expected_return)
+        
+        # Usar matriz de covariância original para preservar relações de risco
         cov_matrix = returns.cov() * 252
         
         # Garantir que a matriz de covariância é positiva definida
@@ -182,22 +200,34 @@ def otimizar(tickers, perfil, prices_df=None):
         # Definir risco alvo baseado no perfil
         if perfil == "Conservador":
             risk_target = None  # Vamos minimizar risco
+            # Adicionar restrições mais conservadoras
+            constraints = [
+                cp.sum(weights) == 1,     # Soma dos pesos = 1
+                weights >= 0.04,          # Mínimo 4% por ativo
+                weights <= 0.20,          # Máximo 20% por ativo
+                # Adicionar restrição de diversificação - pelo menos 6 ativos com peso significativo
+                cp.sum(cp.minimum(weights, 0.05)) >= 0.30  # Pelo menos 30% do portfólio em 6+ ativos
+            ]
         elif perfil == "Moderado":
             risk_target = None  # Vamos maximizar Sharpe
+            constraints = [
+                cp.sum(weights) == 1,  # Soma dos pesos = 1
+                weights >= 0.04,       # Mínimo 4% por ativo
+                weights <= 0.20        # Máximo 20% por ativo
+            ]
         else:  # Agressivo
             # Definir um risco alvo maior
             risk_target = 0.20
-        
-        # Definir função objetivo e restrições
-        constraints = [
-            cp.sum(weights) == 1,  # Soma dos pesos = 1
-            weights >= 0.04,        # Mínimo 4% por ativo
-            weights <= 0.20         # Máximo 20% por ativo
-        ]
+            constraints = [
+                cp.sum(weights) == 1,  # Soma dos pesos = 1
+                weights >= 0.04,       # Mínimo 4% por ativo
+                weights <= 0.25        # Máximo 25% por ativo para perfil agressivo
+            ]
         
         # Realizar a otimização com base no perfil
         if perfil == "Conservador":
-            # Minimizar risco
+            # Para conservador, minimizar combinação de risco e drawdown
+            # Usar aproximação de drawdown pelo risco
             prob = cp.Problem(
                 cp.Minimize(cp.quad_form(weights, cov_matrix)),
                 constraints
@@ -313,6 +343,10 @@ def otimizar(tickers, perfil, prices_df=None):
         # Recalcular a performance para os top 10
         selected_returns = returns[selected_tickers]
         mu_selected = selected_returns.mean() * 252
+        
+        # Garantir que os retornos médios sejam positivos
+        mu_selected = np.maximum(mu_selected, min_expected_return)
+        
         cov_selected = selected_returns.cov() * 252
         
         expected_return = np.sum(mu_selected * selected_weights)
@@ -399,12 +433,40 @@ def gerar_texto(carteira, perfil):
     """
     
     try:
-        resp = openai.ChatCompletion.create(
+        # Verificar se a API key está disponível
+        if not OPENAI_API_KEY:
+            return "Não foi possível gerar a análise: Chave de API do OpenAI não configurada."
+        
+        # Atualizar para usar a nova API da OpenAI
+        from openai import OpenAI
+        
+        # Criar cliente com a API key
+        client = OpenAI(api_key=OPENAI_API_KEY)
+        
+        # Fazer a chamada para a API com o novo formato
+        response = client.chat.completions.create(
             model="gpt-3.5-turbo",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.2
+            messages=[
+                {"role": "system", "content": "Você é um analista financeiro especializado em ETFs e investimentos."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.2,
+            max_tokens=800
         )
-        return resp.choices[0].message.content.strip()
+        
+        # Extrair e retornar o texto da resposta
+        return response.choices[0].message.content.strip()
+    except ImportError:
+        # Fallback para a API antiga se necessário
+        try:
+            resp = openai.ChatCompletion.create(
+                model="gpt-3.5-turbo",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.2
+            )
+            return resp.choices[0].message.content.strip()
+        except Exception as e:
+            return f"Não foi possível gerar a análise: {str(e)}"
     except Exception as e:
         return f"Não foi possível gerar a análise: {str(e)}"
 
@@ -675,13 +737,31 @@ elif st.session_state['stage'] == "result":
     with col2:
         # Gráfico de pizza
         st.subheader("Distribuição da Carteira")
+        
+        # Modificação para garantir que o gráfico use exatamente os mesmos valores da tabela
         fig = px.pie(
             df_aloc,
             values='Alocação (%)',
             names='ETF',
-            title='Composição da Carteira'
+            title='Composição da Carteira',
+            custom_data=['Alocação (%)']  # Incluir valores para hover
         )
-        fig.update_traces(textposition='inside', textinfo='percent+label')
+        
+        # Melhorar a formatação dos textos e labels
+        fig.update_traces(
+            textposition='inside',
+            textinfo='percent+label',
+            texttemplate='%{label}<br>%{percent:.1%}',
+            hovertemplate='<b>%{label}</b><br>Alocação: %{customdata:.2f}%'
+        )
+        
+        # Atualizar layout
+        fig.update_layout(
+            uniformtext_minsize=12,
+            uniformtext_mode='hide',
+            legend=dict(font=dict(size=10))
+        )
+        
         st.plotly_chart(fig)
     
     # Análise textual
