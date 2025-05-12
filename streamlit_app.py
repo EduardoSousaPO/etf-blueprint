@@ -13,15 +13,16 @@ from datetime import datetime
 import io
 from PIL import Image
 import matplotlib.pyplot as plt
+import scipy.stats as stats
 
-# Verificar disponibilidade do PyPortfolioOpt
+# Importação para otimização de portfólio
 try:
-    from pypfopt import EfficientFrontier, expected_returns, risk_models
-    PYPFOPT_AVAILABLE = True
+    import cvxpy as cp
+    CVXPY_AVAILABLE = True
 except ImportError:
-    PYPFOPT_AVAILABLE = False
+    CVXPY_AVAILABLE = False
     st.warning("""
-    ⚠️ O pacote PyPortfolioOpt não está disponível neste ambiente.
+    ⚠️ O pacote CVXPY não está disponível neste ambiente.
     A aplicação usará uma implementação alternativa simplificada para otimização de carteiras.
     """)
 
@@ -148,7 +149,7 @@ def otimizar(tickers, perfil, prices_df=None):
     if prices_df.empty:
         return {}, (0, 0, 0)
     
-    # Remover colunas com valores ausentes ou com variância zero
+    # Remover colunas com valores ausentes
     prices_df = prices_df.dropna(axis=1)
     
     # Verificar se temos dados suficientes
@@ -156,88 +157,134 @@ def otimizar(tickers, perfil, prices_df=None):
         st.warning(f"Dados insuficientes. Apenas {prices_df.shape[1]} ETFs com dados completos.")
         return {}, (0, 0, 0)
     
-    # Se PyPortfolioOpt não estiver disponível, usar implementação alternativa
-    if not PYPFOPT_AVAILABLE:
+    # Se não temos CVXPY disponível, usar implementação alternativa
+    if not CVXPY_AVAILABLE:
         return _otimizar_alternativo(prices_df, perfil)
     
-    # Adicionar uma verificação de variância zero
-    var = prices_df.var()
-    prices_df = prices_df.loc[:, var > 1e-8]
-    
     try:
-        # Calcular retornos esperados e covariância
-        mu = expected_returns.mean_historical_return(prices_df)
-        S = risk_models.sample_cov(prices_df)
+        # Calcular retornos e matriz de covariância
+        returns = prices_df.pct_change().dropna()
+        mu = returns.mean() * 252
+        cov_matrix = returns.cov() * 252
         
-        # Adicionar um pequeno valor à diagonal da matriz de covariância para garantir positividade definida
-        np.fill_diagonal(S.values, S.values.diagonal() + 1e-6)
+        # Garantir que a matriz de covariância é positiva definida
+        min_eigenval = np.min(np.linalg.eigvals(cov_matrix))
+        if min_eigenval < 0:
+            # Adicionar um pequeno valor à diagonal para garantir positividade
+            cov_matrix = cov_matrix + np.eye(cov_matrix.shape[0]) * (abs(min_eigenval) + 1e-6)
         
-        # Criar o objeto EfficientFrontier
-        ef = EfficientFrontier(mu, S)
+        n_assets = len(mu)
         
-        try:
-            # Adicionar restrições
-            ef.add_constraint(lambda w: w >= 0.04)  # Mínimo 4% por ativo
-            ef.add_constraint(lambda w: w <= 0.20)  # Máximo 20% por ativo
+        # Definir variáveis e parâmetros para CVXPY
+        weights = cp.Variable(n_assets)
+        returns_vector = np.array(mu)
+        
+        # Definir risco alvo baseado no perfil
+        if perfil == "Conservador":
+            risk_target = None  # Vamos minimizar risco
+        elif perfil == "Moderado":
+            risk_target = None  # Vamos maximizar Sharpe
+        else:  # Agressivo
+            # Definir um risco alvo maior
+            risk_target = 0.20
+        
+        # Definir função objetivo e restrições
+        constraints = [
+            cp.sum(weights) == 1,  # Soma dos pesos = 1
+            weights >= 0.04,        # Mínimo 4% por ativo
+            weights <= 0.20         # Máximo 20% por ativo
+        ]
+        
+        # Realizar a otimização com base no perfil
+        if perfil == "Conservador":
+            # Minimizar risco
+            prob = cp.Problem(
+                cp.Minimize(cp.quad_form(weights, cov_matrix)),
+                constraints
+            )
+        elif perfil == "Moderado":
+            # Maximizar Sharpe Ratio
+            risk_free_rate = 0.03  # Taxa livre de risco (3%)
+            risk = cp.quad_form(weights, cov_matrix)**0.5
+            excess_return = weights @ returns_vector - risk_free_rate
             
-            # Otimizar de acordo com o perfil
-            if perfil == "Conservador":
-                try:
-                    ef.min_volatility()
-                except Exception as e:
-                    st.warning(f"Erro na otimização de mínima volatilidade: {str(e)}")
-                    # Tentar alternativa mais simples
-                    ef = EfficientFrontier(mu, S)
-                    ef.max_sharpe()
-            elif perfil == "Moderado":
-                try:
-                    ef.max_sharpe()
-                except Exception as e:
-                    st.warning(f"Erro na otimização max_sharpe: {str(e)}")
-                    # Tentar alternativa mais simples
-                    ef = EfficientFrontier(mu, S)
-                    ef.min_volatility()
-            else:  # Agressivo
-                try:
-                    ef.efficient_risk(target_risk=0.20)
-                except Exception as e:
-                    st.warning(f"Erro na otimização efficient_risk: {str(e)}")
-                    # Tentar alternativa mais simples
-                    ef = EfficientFrontier(mu, S)
-                    ef.max_sharpe()
+            # Não podemos maximizar excess_return/risk diretamente, então usamos uma aproximação
+            # Vamos maximizar excess_return e adicionar uma restrição de risco
+            prob = cp.Problem(
+                cp.Maximize(excess_return),
+                constraints + [risk <= 0.15]  # Limitar volatilidade a 15%
+            )
+        else:  # Agressivo
+            # Maximizar retorno para um nível de risco alvo
+            prob = cp.Problem(
+                cp.Maximize(weights @ returns_vector),
+                constraints + [cp.quad_form(weights, cov_matrix)**0.5 <= risk_target]
+            )
+        
+        # Resolver o problema
+        try:
+            prob.solve()
         except Exception as e:
-            st.warning(f"Erro ao aplicar restrições: {str(e)}")
-            # Tentar sem restrições
-            ef = EfficientFrontier(mu, S)
-            ef.max_sharpe()
+            st.warning(f"Erro na otimização principal: {str(e)}. Tentando solução alternativa...")
+            # Tentar solução mais simples se falhar
+            constraints = [
+                cp.sum(weights) == 1,  # Soma dos pesos = 1
+                weights >= 0.0         # Apenas restrição não-negativa
+            ]
+            prob = cp.Problem(
+                cp.Minimize(cp.quad_form(weights, cov_matrix)),
+                constraints
+            )
+            prob.solve()
         
-        # Limpar os pesos e selecionar os top 10
-        pesos = ef.clean_weights()
-        top10 = dict(sorted(pesos.items(), key=lambda x: x[1], reverse=True)[:10])
+        # Verificar se obtivemos uma solução
+        if weights.value is None:
+            raise Exception("Não foi possível encontrar uma solução ótima")
         
-        # Normalizar para soma = 1
+        # Obter pesos e normalizar para garantir restrições
+        pesos = np.array(weights.value).flatten()
+        pesos = np.clip(pesos, 0.04, 0.20)  # Garantir restrições de 4% a 20%
+        pesos = pesos / np.sum(pesos)       # Garantir soma = 1
+        
+        # Criar dicionário de pesos com tickers
+        carteira = {ticker: peso for ticker, peso in zip(returns.columns, pesos)}
+        
+        # Selecionar os top 10
+        top10 = dict(sorted(carteira.items(), key=lambda x: x[1], reverse=True)[:10])
+        
+        # Normalizar os top 10 para soma = 1
         total = sum(top10.values())
         top10 = {k: v/total for k, v in top10.items()}
         
-        # Calcular performance
-        performance = ef.portfolio_performance(verbose=False)
+        # Calcular performance esperada
+        selected_tickers = list(top10.keys())
+        selected_weights = np.array(list(top10.values()))
         
-        return top10, performance
-    
+        # Recalcular a performance para os top 10
+        selected_returns = returns[selected_tickers]
+        mu_selected = selected_returns.mean() * 252
+        cov_selected = selected_returns.cov() * 252
+        
+        expected_return = np.sum(mu_selected * selected_weights)
+        volatility = np.sqrt(selected_weights.T @ cov_selected @ selected_weights)
+        sharpe = expected_return / volatility if volatility > 0 else 0
+        
+        return top10, (expected_return, volatility, sharpe)
+        
     except Exception as e:
         st.error(f"Erro na otimização: {str(e)}")
-        # Criar uma carteira igualmente distribuída como fallback
+        # Usar carteira igualmente distribuída como fallback
         fallback_tickers = list(prices_df.columns)[:10]
         fallback_portfolio = {ticker: 1.0/len(fallback_tickers) for ticker in fallback_tickers}
-        fallback_performance = (0.08, 0.15, 0.4)  # valores de retorno, volatilidade e sharpe fictícios
+        fallback_performance = (0.08, 0.15, 0.4)  # valores fictícios para retorno, volatilidade e sharpe
         
         st.warning("Usando carteira igualmente distribuída como alternativa devido a erro na otimização")
         return fallback_portfolio, fallback_performance
 
-# Função alternativa para otimização quando PyPortfolioOpt não está disponível
+# Função alternativa para otimização quando CVXPY não está disponível
 def _otimizar_alternativo(prices_df, perfil):
     """
-    Implementação simplificada de otimização sem usar PyPortfolioOpt.
+    Implementação simplificada de otimização sem usar CVXPY.
     Usa retornos, volatilidade e correlações para criar uma carteira razoável.
     """
     # Calcular retornos históricos
