@@ -13,6 +13,7 @@ from datetime import datetime
 import io
 from PIL import Image
 import matplotlib.pyplot as plt
+import cvxpy as cp
 
 # Configuração Inicial
 st.set_page_config(
@@ -131,45 +132,220 @@ def estimar_retornos_cov(prices_df):
 
 # Função para otimizar a carteira
 def otimizar(tickers, perfil, prices_df=None):
-    from pypfopt import EfficientFrontier, expected_returns, risk_models
-    
     if prices_df is None or prices_df.empty:
         prices_df = get_prices(tickers)
     
     if prices_df.empty:
         return {}, (0, 0, 0)
     
-    # Calcular retornos esperados e covariância
-    mu = expected_returns.mean_historical_return(prices_df)
-    S = risk_models.sample_cov(prices_df)
+    # Remover colunas com valores ausentes
+    prices_df = prices_df.dropna(axis=1)
     
-    # Criar o objeto EfficientFrontier
-    ef = EfficientFrontier(mu, S)
+    # Verificar se temos dados suficientes
+    if prices_df.shape[1] < 10:
+        st.warning(f"Dados insuficientes. Apenas {prices_df.shape[1]} ETFs com dados completos.")
+        return {}, (0, 0, 0)
     
-    # Adicionar restrições
-    ef.add_constraint(lambda w: w >= 0.04)  # Mínimo 4% por ativo
-    ef.add_constraint(lambda w: w <= 0.20)  # Máximo 20% por ativo
+    try:
+        # Calcular retornos e matriz de covariância
+        returns = prices_df.pct_change().dropna()
+        
+        # Aplicar winsorization para remover outliers extremos
+        # Isso ajuda a melhorar a estabilidade do modelo
+        winsor_returns = returns.copy()
+        for col in winsor_returns.columns:
+            winsor_returns[col] = winsor_returns[col].clip(
+                lower=winsor_returns[col].quantile(0.05),
+                upper=winsor_returns[col].quantile(0.95)
+            )
+            
+        # Usar retornos mais estáveis para cálculo de médias
+        mu = winsor_returns.mean() * 252
+        
+        # Garantir que todos os retornos médios são positivos para ETFs
+        # com um ajuste mínimo para evitar retornos negativos
+        min_expected_return = 0.02  # 2% como retorno mínimo esperado
+        mu = np.maximum(mu, min_expected_return)
+        
+        # Usar matriz de covariância original para preservar relações de risco
+        cov_matrix = returns.cov() * 252
+        
+        # Garantir que a matriz de covariância é positiva definida
+        min_eigenval = np.min(np.linalg.eigvals(cov_matrix))
+        if min_eigenval < 0:
+            # Adicionar um pequeno valor à diagonal para garantir positividade
+            cov_matrix = cov_matrix + np.eye(cov_matrix.shape[0]) * (abs(min_eigenval) + 1e-6)
+        
+        n_assets = len(mu)
+        
+        # Definir variáveis e parâmetros para CVXPY
+        weights = cp.Variable(n_assets)
+        returns_vector = np.array(mu)
+        
+        # Definir risco alvo baseado no perfil
+        if perfil == "Conservador":
+            risk_target = None  # Vamos minimizar risco
+            # Adicionar restrições mais conservadoras
+            constraints = [
+                cp.sum(weights) == 1,     # Soma dos pesos = 1
+                weights >= 0.04,          # Mínimo 4% por ativo
+                weights <= 0.20,          # Máximo 20% por ativo
+                # Adicionar restrição de diversificação - pelo menos 6 ativos com peso significativo
+                cp.sum(cp.minimum(weights, 0.05)) >= 0.30  # Pelo menos 30% do portfólio em 6+ ativos
+            ]
+        elif perfil == "Moderado":
+            risk_target = None  # Vamos maximizar Sharpe
+            constraints = [
+                cp.sum(weights) == 1,  # Soma dos pesos = 1
+                weights >= 0.04,       # Mínimo 4% por ativo
+                weights <= 0.20        # Máximo 20% por ativo
+            ]
+        else:  # Agressivo
+            # Definir um risco alvo maior
+            risk_target = 0.20
+            constraints = [
+                cp.sum(weights) == 1,  # Soma dos pesos = 1
+                weights >= 0.04,       # Mínimo 4% por ativo
+                weights <= 0.25        # Máximo 25% por ativo para perfil agressivo
+            ]
+        
+        # Realizar a otimização com base no perfil
+        if perfil == "Conservador":
+            # Para conservador, minimizar combinação de risco e drawdown
+            # Usar aproximação de drawdown pelo risco
+            prob = cp.Problem(
+                cp.Minimize(cp.quad_form(weights, cov_matrix)),
+                constraints
+            )
+        elif perfil == "Moderado":
+            # Maximizar Sharpe Ratio
+            risk_free_rate = 0.03  # Taxa livre de risco (3%)
+            risk = cp.quad_form(weights, cov_matrix)**0.5
+            excess_return = weights @ returns_vector - risk_free_rate
+            
+            # Não podemos maximizar excess_return/risk diretamente, então usamos uma aproximação
+            # Vamos maximizar excess_return e adicionar uma restrição de risco
+            prob = cp.Problem(
+                cp.Maximize(excess_return),
+                constraints + [risk <= 0.15]  # Limitar volatilidade a 15%
+            )
+        else:  # Agressivo
+            # Maximizar retorno para um nível de risco alvo
+            prob = cp.Problem(
+                cp.Maximize(weights @ returns_vector),
+                constraints + [cp.quad_form(weights, cov_matrix)**0.5 <= risk_target]
+            )
+        
+        # Resolver o problema
+        try:
+            prob.solve()
+        except Exception as e:
+            st.warning(f"Erro na otimização principal: {str(e)}. Tentando solução alternativa...")
+            # Tentar solução mais simples se falhar, mas ainda mantendo restrições de min e max
+            constraints = [
+                cp.sum(weights) == 1,  # Soma dos pesos = 1
+                weights >= 0.04,       # Mínimo 4% por ativo
+                weights <= 0.20        # Máximo 20% por ativo
+            ]
+            prob = cp.Problem(
+                cp.Minimize(cp.quad_form(weights, cov_matrix)),
+                constraints
+            )
+            prob.solve()
+        
+        # Verificar se obtivemos uma solução
+        if weights.value is None:
+            raise Exception("Não foi possível encontrar uma solução ótima")
+        
+        # Obter pesos e normalizar para garantir restrições
+        pesos = np.array(weights.value).flatten()
+        pesos = np.clip(pesos, 0.04, 0.20)  # Garantir restrições de 4% a 20%
+        pesos = pesos / np.sum(pesos)       # Garantir soma = 1
+        
+        # Criar dicionário de pesos com tickers
+        carteira = {ticker: peso for ticker, peso in zip(returns.columns, pesos)}
+        
+        # Selecionar os top 10
+        top10 = dict(sorted(carteira.items(), key=lambda x: x[1], reverse=True)[:10])
+        
+        # Normalizar os top 10 para soma = 1
+        total = sum(top10.values())
+        top10 = {k: v/total for k, v in top10.items()}
+        
+        # Calcular performance esperada
+        selected_weights = np.array([top10.get(ticker, 0) for ticker in returns.columns])
+        expected_return = np.sum(returns_vector * selected_weights)
+        portfolio_risk = np.sqrt(selected_weights.T @ cov_matrix @ selected_weights)
+        sharpe_ratio = expected_return / portfolio_risk if portfolio_risk > 0 else 0
+        
+        performance = (expected_return, portfolio_risk, sharpe_ratio)
+        
+        return top10, performance
+    except Exception as e:
+        st.error(f"Erro na otimização: {str(e)}")
+        return _otimizar_alternativo(prices_df, perfil)
+
+# Função alternativa para otimização quando CVXPY não está disponível
+def _otimizar_alternativo(prices_df, perfil):
+    """
+    Implementação simplificada de otimização sem usar CVXPY.
+    Usa retornos, volatilidade e correlações para criar uma carteira razoável.
+    """
+    # Calcular retornos históricos
+    returns = prices_df.pct_change().dropna()
     
-    # Otimizar de acordo com o perfil
+    # Calcular estatísticas básicas
+    mean_returns = returns.mean() * 252  # Anualizados
+    volatility = returns.std() * np.sqrt(252)  # Anualizada
+    sharpe = mean_returns / volatility
+    
+    # Selecionar ativos com base no perfil
+    selected_assets = pd.DataFrame({
+        'ticker': returns.columns,
+        'return': mean_returns,
+        'volatility': volatility,
+        'sharpe': sharpe
+    })
+    
     if perfil == "Conservador":
-        ef.min_volatility()
+        # Ordenar por volatilidade (menor primeiro)
+        top10 = selected_assets.sort_values('volatility').head(10)
     elif perfil == "Moderado":
-        ef.max_sharpe()
+        # Ordenar por Sharpe ratio (maior primeiro)
+        top10 = selected_assets.sort_values('sharpe', ascending=False).head(10)
     else:  # Agressivo
-        ef.efficient_risk(target_risk=0.20)
+        # Ordenar por retorno esperado (maior primeiro)
+        top10 = selected_assets.sort_values('return', ascending=False).head(10)
     
-    # Limpar os pesos e selecionar os top 10
-    pesos = ef.clean_weights()
-    top10 = dict(sorted(pesos.items(), key=lambda x: x[1], reverse=True)[:10])
+    # Atribuir pesos diferenciados com base no perfil
+    if perfil == "Conservador":
+        # Mais peso para ativos menos voláteis (decrescente, de 20% a 4%)
+        weights = np.linspace(0.20, 0.04, 10)
+    elif perfil == "Moderado":
+        # Peso mais equilibrado mas ainda diferente para cada ativo
+        weights = np.linspace(0.16, 0.06, 10)
+    else:  # Agressivo
+        # Mais peso para ativos com maior retorno (decrescente, de 20% a 4%)
+        weights = np.linspace(0.20, 0.04, 10)
     
-    # Normalizar para soma = 1
-    total = sum(top10.values())
-    top10 = {k: v/total for k, v in top10.items()}
+    # Garantir que a soma seja exatamente 1
+    weights = weights / weights.sum()
     
-    # Calcular performance
-    performance = ef.portfolio_performance(verbose=False)
+    # Garantir limites mínimo e máximo
+    weights = np.clip(weights, 0.04, 0.20)
     
-    return top10, performance
+    # Normalizar novamente para garantir soma = 1
+    weights = weights / weights.sum()
+    
+    # Criar dicionário de pesos
+    portfolio = {ticker: weight for ticker, weight in zip(top10['ticker'], weights)}
+    
+    # Calcular performance esperada
+    expected_return = (top10['return'] * weights).sum()
+    port_volatility = np.sqrt(np.dot(weights, np.dot(returns[top10['ticker']].cov() * 252, weights)))
+    sharpe_ratio = expected_return / port_volatility
+    
+    return portfolio, (expected_return, port_volatility, sharpe_ratio)
 
 # Função para gerar análise de texto com OpenAI
 def gerar_texto(carteira, perfil):
@@ -225,92 +401,140 @@ def gerar_texto(carteira, perfil):
 
 # Função para gerar relatório PDF
 def gerar_pdf(df_aloc, analise_texto, perfil, universo, performance):
-    from weasyprint import HTML
-    import tempfile
+    # Importações necessárias para o ReportLab
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import mm, cm
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image
+    from reportlab.lib.enums import TA_CENTER, TA_LEFT
+    import io
+    from datetime import datetime
     
-    # Criar conteúdo HTML para o relatório
-    html_content = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="UTF-8">
-        <title>Relatório ETF Blueprint</title>
-        <style>
-            body {{ font-family: Arial, sans-serif; margin: 30px; }}
-            h1, h2 {{ color: #2C3E50; }}
-            .header {{ text-align: center; margin-bottom: 30px; }}
-            .date {{ font-size: 14px; color: #7F8C8D; margin-bottom: 20px; }}
-            table {{ width: 100%; border-collapse: collapse; margin: 20px 0; }}
-            th, td {{ border: 1px solid #BDC3C7; padding: 12px; text-align: left; }}
-            th {{ background-color: #F5F7FA; }}
-            .performance {{ margin: 20px 0; padding: 15px; background-color: #F8F9F9; border-radius: 5px; }}
-            .analysis {{ margin: 20px 0; text-align: justify; line-height: 1.6; }}
-            .footer {{ margin-top: 50px; font-size: 12px; color: #95A5A6; text-align: center; }}
-        </style>
-    </head>
-    <body>
-        <div class="header">
-            <h1>ETF Blueprint - Relatório de Carteira</h1>
-            <div class="date">Gerado em: {datetime.now().strftime('%d/%m/%Y %H:%M')}</div>
-        </div>
-        
-        <h2>Perfil do Investidor</h2>
-        <p>Perfil: <strong>{perfil}</strong></p>
-        <p>Universo de ETFs: <strong>{universo}</strong></p>
-        
-        <h2>Carteira Otimizada</h2>
-        <table>
-            <tr>
-                <th>ETF</th>
-                <th>Alocação (%)</th>
-            </tr>
-    """
+    # Criar um buffer para o PDF
+    buffer = io.BytesIO()
     
-    # Adicionar linhas da tabela
+    # Configurações de página
+    doc = SimpleDocTemplate(
+        buffer, 
+        pagesize=A4,
+        leftMargin=1.5*cm,
+        rightMargin=1.5*cm,
+        topMargin=2*cm,
+        bottomMargin=2*cm
+    )
+    
+    # Lista para armazenar os elementos do documento
+    story = []
+    
+    # Estilos de texto
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle(
+        'TitleStyle',
+        parent=styles['Title'],
+        fontSize=16,
+        alignment=TA_CENTER,
+        spaceAfter=6*mm
+    )
+    
+    subtitle_style = ParagraphStyle(
+        'SubtitleStyle',
+        parent=styles['Heading2'],
+        fontSize=14,
+        alignment=TA_CENTER,
+        spaceAfter=6*mm
+    )
+    
+    header_style = ParagraphStyle(
+        'HeaderStyle',
+        parent=styles['Heading3'],
+        fontSize=12,
+        alignment=TA_LEFT,
+        spaceAfter=3*mm
+    )
+    
+    normal_style = ParagraphStyle(
+        'NormalStyle',
+        parent=styles['Normal'],
+        fontSize=10,
+        spaceBefore=1*mm,
+        spaceAfter=3*mm
+    )
+    
+    # Cabeçalho do documento
+    story.append(Paragraph("ETF Blueprint - Relatório de Carteira", title_style))
+    story.append(Paragraph(f"Gerado em: {datetime.now().strftime('%d/%m/%Y %H:%M')}", normal_style))
+    story.append(Spacer(1, 5*mm))
+    
+    # Perfil do investidor
+    story.append(Paragraph("Perfil do Investidor", header_style))
+    story.append(Paragraph(f"Perfil: <b>{perfil}</b>", normal_style))
+    story.append(Paragraph(f"Universo de ETFs: <b>{universo}</b>", normal_style))
+    story.append(Spacer(1, 5*mm))
+    
+    # Carteira otimizada
+    story.append(Paragraph("Carteira Otimizada", header_style))
+    
+    # Dados para a tabela
+    table_data = [["ETF", "Alocação (%)"]]
     for index, row in df_aloc.iterrows():
-        html_content += f"""
-            <tr>
-                <td>{row['ETF']}</td>
-                <td>{row['Alocação (%)']:.2f}%</td>
-            </tr>
-        """
+        table_data.append([row['ETF'], f"{row['Alocação (%)']:.2f}%"])
     
-    # Adicionar resultados de performance
+    # Estilo da tabela
+    table_style = TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.black),
+        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+        ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+        ('GRID', (0, 0), (-1, -1), 1, colors.black),
+        ('BOX', (0, 0), (-1, -1), 1, colors.black),
+    ])
+    
+    # Criar tabela
+    etf_table = Table(table_data, colWidths=[doc.width*0.6, doc.width*0.3])
+    etf_table.setStyle(table_style)
+    story.append(etf_table)
+    story.append(Spacer(1, 5*mm))
+    
+    # Performance esperada
     expected_return, volatility, sharpe = performance
-    html_content += f"""
-        </table>
-        
-        <div class="performance">
-            <h2>Performance Esperada</h2>
-            <p>Retorno Anual Esperado: <strong>{expected_return*100:.2f}%</strong></p>
-            <p>Volatilidade Anual: <strong>{volatility*100:.2f}%</strong></p>
-            <p>Índice Sharpe: <strong>{sharpe:.2f}</strong></p>
-        </div>
-        
-        <div class="analysis">
-            <h2>Análise da Carteira</h2>
-            <p>{analise_texto}</p>
-        </div>
-        
-        <div class="footer">
-            <p>© {datetime.now().year} ETF Blueprint - Todos os direitos reservados</p>
-        </div>
-    </body>
-    </html>
-    """
+    story.append(Paragraph("Performance Esperada", header_style))
     
-    # Usar temporário para criar o PDF
-    with tempfile.NamedTemporaryFile(suffix='.html', delete=False) as f:
-        f.write(html_content.encode('utf-8'))
-        temp_path = f.name
+    # Dados para a tabela de performance
+    perf_data = [
+        ["Retorno Anual Esperado:", f"{expected_return*100:.2f}%"],
+        ["Volatilidade Anual:", f"{volatility*100:.2f}%"],
+        ["Índice Sharpe:", f"{sharpe:.2f}"]
+    ]
     
-    # Converter HTML para PDF
-    pdf_bytes = HTML(filename=temp_path).write_pdf()
+    # Criar tabela de performance
+    perf_table = Table(perf_data, colWidths=[doc.width*0.6, doc.width*0.3])
+    perf_table.setStyle(TableStyle([
+        ('ALIGN', (0, 0), (0, -1), 'LEFT'),
+        ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+        ('GRID', (0, 0), (-1, -1), 1, colors.lightgrey),
+        ('BOX', (0, 0), (-1, -1), 1, colors.lightgrey),
+    ]))
+    story.append(perf_table)
+    story.append(Spacer(1, 10*mm))
     
-    # Remover arquivo temporário
-    os.unlink(temp_path)
+    # Análise da carteira
+    story.append(Paragraph("Análise da Carteira", header_style))
+    story.append(Paragraph(analise_texto, normal_style))
     
-    return pdf_bytes
+    # Rodapé
+    story.append(Spacer(1, 10*mm))
+    story.append(Paragraph(f"© {datetime.now().year} ETF Blueprint - Todos os direitos reservados", 
+                          ParagraphStyle('Footer', parent=styles['Normal'], alignment=TA_CENTER, fontSize=8)))
+    
+    # Gerar PDF
+    doc.build(story)
+    
+    # Retornar o conteúdo do buffer
+    buffer.seek(0)
+    return buffer.getvalue()
 
 # Inicializar session_state
 if 'stage' not in st.session_state:
