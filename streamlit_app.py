@@ -16,6 +16,9 @@ import matplotlib.pyplot as plt
 import cvxpy as cp
 import scipy.stats
 
+# Verificar se CVXPY está disponível
+CVXPY_AVAILABLE = True  # Uma vez que importamos cvxpy acima, ele está disponível
+
 # Configuração Inicial
 st.set_page_config(
     page_title="ETF Blueprint",
