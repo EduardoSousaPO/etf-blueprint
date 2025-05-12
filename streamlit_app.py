@@ -326,57 +326,125 @@ def _otimizar_alternativo(prices_df, perfil):
     
     return portfolio, (expected_return, port_volatility, sharpe_ratio)
 
-# Função para gerar análise de texto com OpenAI
+# Adicionar função para calcular fronteira eficiente (após a função _otimizar_alternativo)
+def calcular_fronteira_eficiente(prices_df, n_portfolios=50):
+    # Calcular retornos diários
+    returns = prices_df.pct_change().dropna()
+    
+    # Número de ativos
+    n_assets = returns.shape[1]
+    
+    # Arrays para armazenar dados dos portfólios
+    all_weights = np.zeros((n_portfolios, n_assets))
+    ret_arr = np.zeros(n_portfolios)
+    vol_arr = np.zeros(n_portfolios)
+    sharpe_arr = np.zeros(n_portfolios)
+    
+    # Calcular médias de retornos anualizados
+    mean_returns = returns.mean() * 252
+    
+    # Garantir que haja retornos positivos
+    if (mean_returns <= 0).all():
+        mean_returns = mean_returns + abs(mean_returns.min()) + 0.02
+    
+    # Calcular matriz de covariância anualizada
+    cov_matrix = returns.cov() * 252
+    
+    # Taxa livre de risco
+    risk_free = 0.03  # 3% ao ano
+    
+    # Gerar portfólios aleatórios
+    for i in range(n_portfolios):
+        # Gerar pesos aleatórios
+        weights = np.random.random(n_assets)
+        weights = weights / np.sum(weights)
+        
+        # Restringir aos limites (4%-20%)
+        weights = np.clip(weights, 0.04, 0.20)
+        weights = weights / np.sum(weights)
+        
+        # Garantir que o número de ativos com peso >= 4% não exceda o número total de ativos
+        max_assets = min(n_assets, 25)  # Limitar a 25 ativos no máximo
+        nonzero_weights = weights[weights >= 0.04]
+        
+        if len(nonzero_weights) > max_assets:
+            # Manter apenas os top pesos
+            cutoff = np.sort(weights)[-max_assets]
+            weights[weights < cutoff] = 0
+            weights = weights / np.sum(weights)
+        
+        # Salvar pesos
+        all_weights[i, :] = weights
+        
+        # Calcular retorno esperado
+        ret_arr[i] = np.sum(mean_returns * weights)
+        
+        # Calcular volatilidade esperada
+        vol_arr[i] = np.sqrt(np.dot(weights.T, np.dot(cov_matrix, weights)))
+        
+        # Calcular Sharpe ratio
+        sharpe_arr[i] = (ret_arr[i] - risk_free) / vol_arr[i]
+    
+    # Combinar resultados
+    frontier_data = {
+        'Retorno': ret_arr,
+        'Volatilidade': vol_arr,
+        'Sharpe': sharpe_arr
+    }
+    
+    return pd.DataFrame(frontier_data)
+
+# Modificar a função gerar_texto para usar modelos GPT mais baratos e robustos
 def gerar_texto(carteira, perfil):
     prompt = f"""
-    Você é analista. Explique esta carteira de 10 ETFs {carteira}
-    para um investidor {perfil}, em até 400 palavras, em português simples.
+    Você é analista financeiro. Explique esta carteira de ETFs {carteira}
+    para um investidor {perfil}, em até 300 palavras, em português simples.
+    Foque em explicar a diversificação e estratégia da carteira.
     """
     
     try:
         # Verificar se a API key está disponível
         if not OPENAI_API_KEY:
-            return "Não foi possível gerar a análise: Chave de API do OpenAI não configurada."
+            return gerar_texto_demo(carteira, perfil)
         
-        # Atualizar para usar a nova API da OpenAI
+        # Tentar a nova API da OpenAI primeiro
         try:
             from openai import OpenAI
             
-            # Remover possíveis prefixos que causam erros
-            clean_api_key = OPENAI_API_KEY
-            if clean_api_key.startswith("sk-proj-"):
-                # Remover prefixo que pode causar o erro "Incorrect API key provided"
-                clean_api_key = clean_api_key.replace("sk-proj-", "sk-")
+            # Criar cliente com a API key
+            client = OpenAI(api_key=OPENAI_API_KEY)
             
-            # Criar cliente com a API key limpa
-            client = OpenAI(api_key=clean_api_key)
-            
-            # Fazer a chamada para a API com o novo formato
+            # Fazer a chamada para a API com o modelo mais barato
             response = client.chat.completions.create(
-                model="gpt-3.5-turbo",
+                model="gpt-3.5-turbo",  # Modelo mais barato
                 messages=[
-                    {"role": "system", "content": "Você é um analista financeiro especializado em ETFs e investimentos."},
+                    {"role": "system", "content": "Você é um analista financeiro especializado em ETFs. Seja direto e objetivo."},
                     {"role": "user", "content": prompt}
                 ],
-                temperature=0.2,
-                max_tokens=800
+                temperature=0.3,
+                max_tokens=500
             )
             
             # Extrair e retornar o texto da resposta
             return response.choices[0].message.content.strip()
         except Exception as api_error:
-            # Fallback para a API antiga
+            # Tentar alternativa com API antiga
             try:
                 resp = openai.ChatCompletion.create(
                     model="gpt-3.5-turbo",
-                    messages=[{"role": "user", "content": prompt}],
-                    temperature=0.2
+                    messages=[
+                        {"role": "system", "content": "Você é um analista financeiro especializado em ETFs. Seja direto e objetivo."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    temperature=0.3
                 )
                 return resp.choices[0].message.content.strip()
             except Exception as e:
-                return f"Não foi possível gerar a análise: {str(e)}. Você pode encontrar sua API key em https://platform.openai.com/account/api-keys."
+                # Se falhar, usar o modo de demonstração
+                return gerar_texto_demo(carteira, perfil)
     except Exception as e:
-        return f"Não foi possível gerar a análise: {str(e)}"
+        # Se ocorrer qualquer erro, usar o modo de demonstração
+        return gerar_texto_demo(carteira, perfil)
 
 # Função para gerar texto de análise com OpenAI (após a função gerar_texto existente)
 def gerar_texto_demo(carteira, perfil):
@@ -637,6 +705,8 @@ if __name__ == "__main__":
                     
                     # Obter dados de preço (históricos ou simulados)
                     prices_df = get_prices(etfs)
+                    # Guardar para uso na fronteira eficiente
+                    st.session_state['precos_historicos'] = prices_df
                     
                     progress_status.write(f"{progress_text} Otimizando alocação...")
                     progress_bar.progress(0.6)
@@ -731,6 +801,84 @@ if __name__ == "__main__":
             st.subheader("Análise da Carteira")
             st.markdown(analise)
             
+            # Adicionar gráfico de fronteira eficiente
+            st.subheader("Fronteira Eficiente")
+            
+            # Se temos os preços históricos no session_state, usar para calcular fronteira
+            if 'precos_historicos' in st.session_state:
+                prices_df = st.session_state['precos_historicos']
+            else:
+                # Selecionar ETFs com base no universo escolhido
+                if universo == "BR":
+                    etfs = ETFs_BR
+                elif universo == "EUA":
+                    etfs = ETFs_EUA
+                else:
+                    etfs = ETFs_BR + ETFs_EUA
+                # Obter dados de preço
+                prices_df = get_prices(etfs)
+                # Guardar para uso futuro
+                st.session_state['precos_historicos'] = prices_df
+            
+            # Calcular fronteira eficiente
+            try:
+                frontier_df = calcular_fronteira_eficiente(prices_df)
+                
+                # Criar gráfico de fronteira eficiente
+                fig_ef = go.Figure()
+                
+                # Adicionar pontos da fronteira
+                fig_ef.add_trace(
+                    go.Scatter(
+                        x=frontier_df['Volatilidade'], 
+                        y=frontier_df['Retorno'],
+                        mode='markers',
+                        marker=dict(
+                            size=6,
+                            color=frontier_df['Sharpe'],
+                            colorscale='Viridis',
+                            showscale=True,
+                            colorbar=dict(title="Sharpe Ratio")
+                        ),
+                        name='Portfólios Possíveis'
+                    )
+                )
+                
+                # Adicionar a carteira otimizada
+                fig_ef.add_trace(
+                    go.Scatter(
+                        x=[risco],
+                        y=[retorno],
+                        mode='markers',
+                        marker=dict(
+                            size=15,
+                            color='red',
+                            symbol='star'
+                        ),
+                        name='Carteira Otimizada'
+                    )
+                )
+                
+                # Atualizar layout
+                fig_ef.update_layout(
+                    title='Fronteira Eficiente',
+                    xaxis_title='Volatilidade (Risco)',
+                    yaxis_title='Retorno Esperado',
+                    xaxis=dict(tickformat=".1%"),
+                    yaxis=dict(tickformat=".1%"),
+                    height=350,
+                    legend=dict(
+                        yanchor="top",
+                        y=0.99,
+                        xanchor="left",
+                        x=0.01
+                    )
+                )
+                
+                st.plotly_chart(fig_ef, use_container_width=True)
+            except Exception as e:
+                st.warning(f"Não foi possível gerar o gráfico de fronteira eficiente: {str(e)}")
+            
             # Botões de download
             btn_col1, btn_col2 = st.columns(2)
             
@@ -760,22 +908,30 @@ if __name__ == "__main__":
             # Gráfico de pizza
             st.subheader("Distribuição da Carteira")
             
+            # Clonamos os dados para garantir que não haja problemas de referência
+            plot_data = df_aloc.copy()
+            
+            # Criar o gráfico usando uma abordagem mais direta
             fig = px.pie(
-                df_aloc,
-                values='Alocação (%)',
-                names='ETF',
+                plot_data,
+                values="Alocação (%)",  # Nome exato da coluna
+                names="ETF",
                 title='Composição da Carteira'
             )
             
+            # Configurações para melhorar a exibição
             fig.update_traces(
                 textposition='inside',
                 textinfo='percent+label',
-                texttemplate="%{label}<br>%{percent:.1%}"
+                texttemplate="%{label}<br>%{percent:.1%}",
+                hovertemplate='<b>%{label}</b><br>Alocação: %{value:.2f}%<extra></extra>'
             )
             
+            # Ajustar layout
             fig.update_layout(
-                height=450,
-                margin=dict(t=60, b=20, l=20, r=20)
+                showlegend=False,  # Sem legenda para ficar mais limpo
+                height=400,
+                margin=dict(t=40, b=0, l=0, r=0)
             )
             
             st.plotly_chart(fig, use_container_width=True)
