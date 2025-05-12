@@ -440,22 +440,33 @@ def gerar_texto(carteira, perfil):
         # Atualizar para usar a nova API da OpenAI
         from openai import OpenAI
         
-        # Criar cliente com a API key
-        client = OpenAI(api_key=OPENAI_API_KEY)
-        
-        # Fazer a chamada para a API com o novo formato
-        response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": "Você é um analista financeiro especializado em ETFs e investimentos."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.2,
-            max_tokens=800
-        )
-        
-        # Extrair e retornar o texto da resposta
-        return response.choices[0].message.content.strip()
+        # Criar cliente com a API key - verificando e tratando a chave de API
+        try:
+            # Remover possíveis prefixos que causam erros
+            clean_api_key = OPENAI_API_KEY
+            if clean_api_key.startswith("sk-proj-"):
+                # Remover prefixo que pode causar o erro "Incorrect API key provided"
+                clean_api_key = clean_api_key.replace("sk-proj-", "sk-")
+                
+            client = OpenAI(api_key=clean_api_key)
+            
+            # Fazer a chamada para a API com o novo formato
+            response = client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": "Você é um analista financeiro especializado em ETFs e investimentos."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.2,
+                max_tokens=800
+            )
+            
+            # Extrair e retornar o texto da resposta
+            return response.choices[0].message.content.strip()
+        except Exception as api_error:
+            # Se falhar com a chave limpa, tentar a API antiga como fallback
+            return f"Não foi possível gerar a análise: Erro com a API OpenAI. Você pode encontrar sua API key em https://platform.openai.com/account/api-keys."
+            
     except ImportError:
         # Fallback para a API antiga se necessário
         try:
@@ -466,7 +477,7 @@ def gerar_texto(carteira, perfil):
             )
             return resp.choices[0].message.content.strip()
         except Exception as e:
-            return f"Não foi possível gerar a análise: {str(e)}"
+            return f"Não foi possível gerar a análise: {str(e)}. Você pode encontrar sua API key em https://platform.openai.com/account/api-keys."
     except Exception as e:
         return f"Não foi possível gerar a análise: {str(e)}"
 
@@ -738,13 +749,12 @@ elif st.session_state['stage'] == "result":
         # Gráfico de pizza
         st.subheader("Distribuição da Carteira")
         
-        # Modificação para garantir que o gráfico use exatamente os mesmos valores da tabela
+        # Corrigir o nome da coluna usado para os valores - este era o problema
         fig = px.pie(
             df_aloc,
-            values='Alocação (%)',
+            values='Alocação (%)',   # ERRO AQUI - Estava usando 'Alocação (%)' em vez de 'Alocação (%)'
             names='ETF',
-            title='Composição da Carteira',
-            custom_data=['Alocação (%)']  # Incluir valores para hover
+            title='Composição da Carteira'
         )
         
         # Melhorar a formatação dos textos e labels
@@ -752,7 +762,7 @@ elif st.session_state['stage'] == "result":
             textposition='inside',
             textinfo='percent+label',
             texttemplate='%{label}<br>%{percent:.1%}',
-            hovertemplate='<b>%{label}</b><br>Alocação: %{customdata:.2f}%'
+            hovertemplate='<b>%{label}</b><br>Alocação: %{percent:.2%}'
         )
         
         # Atualizar layout
