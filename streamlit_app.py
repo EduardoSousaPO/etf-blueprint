@@ -226,10 +226,11 @@ def otimizar(tickers, perfil, prices_df=None):
             prob.solve()
         except Exception as e:
             st.warning(f"Erro na otimização principal: {str(e)}. Tentando solução alternativa...")
-            # Tentar solução mais simples se falhar
+            # Tentar solução mais simples se falhar, mas ainda mantendo restrições de min e max
             constraints = [
                 cp.sum(weights) == 1,  # Soma dos pesos = 1
-                weights >= 0.0         # Apenas restrição não-negativa
+                weights >= 0.04,       # Mínimo 4% por ativo
+                weights <= 0.20        # Máximo 20% por ativo
             ]
             prob = cp.Problem(
                 cp.Minimize(cp.quad_form(weights, cov_matrix)),
@@ -256,6 +257,55 @@ def otimizar(tickers, perfil, prices_df=None):
         total = sum(top10.values())
         top10 = {k: v/total for k, v in top10.items()}
         
+        # Verificar se os pesos estão dentro dos limites após a normalização
+        # Se tiver pesos abaixo de 4%, ajustar para 4% e redistribuir o excesso
+        min_weight = min(top10.values())
+        if min_weight < 0.04:
+            # Identificar ETFs abaixo do mínimo
+            below_min = {k: v for k, v in top10.items() if v < 0.04}
+            above_min = {k: v for k, v in top10.items() if v >= 0.04}
+            
+            # Calcular quanto precisamos ajustar
+            deficit = sum([0.04 - v for v in below_min.values()])
+            
+            # Redistribuir proporcionalmente dos ETFs acima do mínimo
+            if above_min:
+                total_above = sum(above_min.values())
+                for k in above_min:
+                    above_min[k] = above_min[k] - (deficit * above_min[k] / total_above)
+                
+                # Atualizar com os novos valores
+                for k in below_min:
+                    top10[k] = 0.04
+                for k in above_min:
+                    top10[k] = above_min[k]
+        
+        # Se tiver pesos acima de 20%, ajustar para 20% e redistribuir o excesso
+        max_weight = max(top10.values())
+        if max_weight > 0.20:
+            # Identificar ETFs acima do máximo
+            above_max = {k: v for k, v in top10.items() if v > 0.20}
+            below_max = {k: v for k, v in top10.items() if v <= 0.20 and v >= 0.04}
+            
+            # Calcular quanto precisamos ajustar
+            excess = sum([v - 0.20 for v in above_max.values()])
+            
+            # Redistribuir proporcionalmente para os ETFs abaixo do máximo
+            if below_max:
+                total_below = sum(below_max.values())
+                for k in below_max:
+                    below_max[k] = below_max[k] + (excess * below_max[k] / total_below)
+                
+                # Atualizar com os novos valores
+                for k in above_max:
+                    top10[k] = 0.20
+                for k in below_max:
+                    top10[k] = below_max[k]
+        
+        # Normalizar uma última vez para garantir que a soma seja exatamente 1
+        total = sum(top10.values())
+        top10 = {k: v/total for k, v in top10.items()}
+        
         # Calcular performance esperada
         selected_tickers = list(top10.keys())
         selected_weights = np.array(list(top10.values()))
@@ -273,13 +323,8 @@ def otimizar(tickers, perfil, prices_df=None):
         
     except Exception as e:
         st.error(f"Erro na otimização: {str(e)}")
-        # Usar carteira igualmente distribuída como fallback
-        fallback_tickers = list(prices_df.columns)[:10]
-        fallback_portfolio = {ticker: 1.0/len(fallback_tickers) for ticker in fallback_tickers}
-        fallback_performance = (0.08, 0.15, 0.4)  # valores fictícios para retorno, volatilidade e sharpe
-        
-        st.warning("Usando carteira igualmente distribuída como alternativa devido a erro na otimização")
-        return fallback_portfolio, fallback_performance
+        # Usar implementação alternativa como fallback
+        return _otimizar_alternativo(prices_df, perfil)
 
 # Função alternativa para otimização quando CVXPY não está disponível
 def _otimizar_alternativo(prices_df, perfil):
@@ -316,18 +361,24 @@ def _otimizar_alternativo(prices_df, perfil):
     # Selecionar top 10
     top10 = selected_assets.head(10)
     
-    # Criar carteira com base no perfil
+    # Criar carteira com base no perfil e garantir pesos diferentes
     if perfil == "Conservador":
-        # Mais peso para ativos menos voláteis
-        weights = np.array([15, 14, 13, 12, 11, 10, 9, 8, 5, 3])
+        # Mais peso para ativos menos voláteis (decrescente, de 20% a 4%)
+        weights = np.linspace(0.20, 0.04, 10)
     elif perfil == "Moderado":
-        # Peso mais equilibrado
-        weights = np.array([12, 12, 11, 11, 10, 10, 9, 9, 8, 8])
+        # Peso mais equilibrado mas ainda diferente para cada ativo
+        weights = np.linspace(0.16, 0.06, 10)
     else:  # Agressivo
-        # Mais peso para ativos com maior retorno
-        weights = np.array([16, 15, 14, 12, 10, 9, 8, 7, 5, 4])
+        # Mais peso para ativos com maior retorno (decrescente, de 20% a 4%)
+        weights = np.linspace(0.20, 0.04, 10)
     
-    # Normalizar pesos para soma = 1
+    # Garantir que a soma seja exatamente 1
+    weights = weights / weights.sum()
+    
+    # Garantir limites mínimo e máximo
+    weights = np.clip(weights, 0.04, 0.20)
+    
+    # Normalizar novamente para garantir soma = 1
     weights = weights / weights.sum()
     
     # Criar dicionário de pesos
