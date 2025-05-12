@@ -18,7 +18,6 @@ import scipy.stats
 
 # Verificar se CVXPY está disponível
 try:
-    import cvxpy as cp
     CVXPY_AVAILABLE = True
 except ImportError:
     CVXPY_AVAILABLE = False
@@ -68,6 +67,33 @@ if OPENAI_API_KEY:
     except Exception:
         pass  # Ignora erros na configuração da API
 
+# Verificar se a API OpenAI está acessível
+def verificar_openai_api():
+    """Verifica se a API do OpenAI está acessível."""
+    if not OPENAI_API_KEY:
+        return False
+    
+    try:
+        # Tentar a nova API primeiro
+        try:
+            from openai import OpenAI
+            client = OpenAI(api_key=OPENAI_API_KEY)
+            # Fazer uma chamada simples para verificar a conexão
+            client.models.list(limit=1)
+            return True
+        except Exception:
+            # Tentar a API antiga
+            try:
+                openai.Model.list(limit=1)
+                return True
+            except Exception:
+                return False
+    except Exception:
+        return False
+
+# Verificar se a API está disponível
+OPENAI_API_DISPONIVEL = verificar_openai_api()
+
 # Definir listas de ETFs
 ETFS_BR = [
     "BBSD11", "BOVA11", "BOVB11", "BOVS11", "BOVV11", "BRAX11", 
@@ -93,7 +119,7 @@ def filtrar_universo(opcao):
         return ETFS_EUA
     return ETFS_BR + ETFS_EUA
 
-# Função para obter preços históricos modificada com fallback para dados simulados
+# Função para obter preços históricos modificada para usar get_api_key
 def get_prices(tickers, start_date=None, end_date=None):
     """
     Obtém preços históricos para os tickers fornecidos.
@@ -146,7 +172,7 @@ def generate_simulated_prices(tickers, days=252*2):
     np.random.seed(42)  # Para reprodutibilidade
     
     # Criar datas para os últimos 2 anos (aproximadamente 252 dias úteis por ano)
-    end_date = datetime.now()  # Corrigido: usar datetime.now() ao invés de datetime.datetime.now()
+    end_date = datetime.now()
     dates = [end_date - datetime.timedelta(days=i) for i in range(days)]
     dates.reverse()
     
@@ -181,9 +207,8 @@ def estimar_retornos_cov(prices_df):
     
     return mu, S
 
-# Função para otimizar a carteira com melhor tratamento de erros
+# Função para otimizar a carteira modificada para usar dados simulados se necessário
 def otimizar(tickers, perfil, prices_df=None):
-    """Otimiza uma carteira de ETFs conforme o perfil de risco."""
     if prices_df is None or prices_df.empty:
         prices_df = get_prices(tickers)
     
@@ -207,13 +232,10 @@ def otimizar(tickers, perfil, prices_df=None):
         returns = prices_df.pct_change().dropna()
         
         # Aplicar winsorization para remover outliers extremos
+        # Isso ajuda a melhorar a estabilidade do modelo
         winsor_returns = returns.copy()
         for col in winsor_returns.columns:
-            try:
-                winsor_returns[col] = scipy.stats.mstats.winsorize(winsor_returns[col], limits=[0.01, 0.01])
-            except Exception:
-                # Se falhar, manter os valores originais
-                pass
+            winsor_returns[col] = scipy.stats.mstats.winsorize(winsor_returns[col], limits=[0.01, 0.01])
         
         # Calcular retornos esperados e matriz de covariância
         expected_returns = winsor_returns.mean() * 252  # Anualizado
@@ -277,9 +299,9 @@ def otimizar(tickers, perfil, prices_df=None):
                         allocation[ticker] = round(optimal_weights[i] * 100, 2)
                 
                 # Calcular métricas do portfólio otimizado
-                portfolio_return = float(expected_returns @ optimal_weights)
-                portfolio_risk = float(np.sqrt(optimal_weights @ cov_matrix @ optimal_weights))
-                portfolio_sharpe = float(portfolio_return / portfolio_risk if portfolio_risk > 0 else 0)
+                portfolio_return = (expected_returns @ optimal_weights)
+                portfolio_risk = np.sqrt(optimal_weights @ cov_matrix @ optimal_weights)
+                portfolio_sharpe = portfolio_return / portfolio_risk
                 
                 return allocation, (portfolio_return, portfolio_risk, portfolio_sharpe)
             else:
@@ -358,16 +380,31 @@ def _otimizar_alternativo(prices_df, perfil):
 # Adicionar função para calcular fronteira eficiente (após a função _otimizar_alternativo)
 def calcular_fronteira_eficiente(prices_df, n_portfolios=50):
     """Calcula a fronteira eficiente com tratamento de erros e tipos melhorado."""
-    # Verificar se temos dados suficientes
+    # Garantir que temos pelo menos 2 colunas (ETFs)
     if prices_df.shape[1] < 2:
-        raise ValueError("São necessários pelo menos 2 ativos para calcular a fronteira eficiente")
+        raise ValueError(f"São necessários pelo menos 2 ativos para calcular a fronteira eficiente. Encontrados: {prices_df.shape[1]}")
+    
+    # Limitar o número máximo de ETFs para evitar cálculos excessivos
+    max_etfs = 20
+    if prices_df.shape[1] > max_etfs:
+        # Selecionar os ETFs mais líquidos (com menos valores ausentes)
+        missing_counts = prices_df.isnull().sum()
+        top_etfs = missing_counts.nsmallest(max_etfs).index.tolist()
+        prices_df = prices_df[top_etfs]
     
     # Calcular retornos diários
     returns = prices_df.pct_change().dropna()
     
+    # Limpar potenciais valores infinitos ou NaN
+    returns = returns.replace([np.inf, -np.inf], np.nan).dropna()
+    
     # Verificar se temos dias suficientes
     if returns.shape[0] < 20:
-        raise ValueError("São necessários pelo menos 20 dias de dados para calcular a fronteira eficiente")
+        raise ValueError(f"São necessários pelo menos 20 dias de dados para calcular a fronteira eficiente. Encontrados: {returns.shape[0]}")
+    
+    # Garantir que temos pelo menos 2 ETFs após limpeza
+    if returns.shape[1] < 2:
+        raise ValueError(f"Após limpeza de dados, restaram menos de 2 ETFs válidos. Não é possível calcular a fronteira eficiente.")
     
     # Número de ativos
     n_assets = returns.shape[1]
@@ -395,6 +432,8 @@ def calcular_fronteira_eficiente(prices_df, n_portfolios=50):
     for i in range(n_portfolios):
         # Gerar pesos aleatórios
         weights = np.random.random(n_assets)
+        # Garantir que não haja valores negativos ou NaN
+        weights = np.clip(weights, 0.001, 1.0)
         weights = weights / np.sum(weights)
         
         # Restringir aos limites (4%-20%)
@@ -422,7 +461,7 @@ def calcular_fronteira_eficiente(prices_df, n_portfolios=50):
         # Calcular volatilidade esperada
         vol_arr[i] = np.sqrt(np.dot(weights.T, np.dot(cov_matrix, weights)))
         
-        # Calcular Sharpe ratio
+        # Calcular Sharpe ratio com proteção contra divisão por zero
         sharpe_arr[i] = (ret_arr[i] - risk_free) / vol_arr[i] if vol_arr[i] > 0 else 0
     
     # Combinar resultados
@@ -432,20 +471,24 @@ def calcular_fronteira_eficiente(prices_df, n_portfolios=50):
         'Sharpe': sharpe_arr
     }
     
-    return pd.DataFrame(frontier_data)
+    # Criar o DataFrame e garantir que não há valores NaN
+    frontier_df = pd.DataFrame(frontier_data)
+    frontier_df = frontier_df.dropna()
+    
+    return frontier_df
 
-# Modificar a função gerar_texto para ser mais robusta
+# Modificar função para geração de texto para usar verificação de API
 def gerar_texto(carteira, perfil):
     """Gera análise textual da carteira usando OpenAI API com melhor tratamento de erros."""
+    # Se API não estiver disponível, usar texto demo
+    if not OPENAI_API_DISPONIVEL:
+        return gerar_texto_demo(carteira, perfil)
+    
     prompt = f"""
     Você é analista financeiro. Explique esta carteira de ETFs {carteira}
     para um investidor {perfil}, em até 300 palavras, em português simples.
     Foque em explicar a diversificação e estratégia da carteira.
     """
-    
-    # Se não temos API key, usar o texto demo
-    if not OPENAI_API_KEY:
-        return gerar_texto_demo(carteira, perfil)
     
     try:
         # Tentar a nova API da OpenAI primeiro
@@ -468,7 +511,7 @@ def gerar_texto(carteira, perfil):
             
             # Extrair e retornar o texto da resposta
             return response.choices[0].message.content.strip()
-        except Exception as api_error:
+        except Exception:
             # Tentar alternativa com API antiga
             try:
                 resp = openai.ChatCompletion.create(
@@ -493,21 +536,29 @@ def gerar_texto_demo(carteira, perfil):
     Gera um texto de análise para o modo de demonstração, sem usar a API OpenAI.
     """
     etfs_list = list(carteira.keys())
+    if not etfs_list:
+        return f"Não foi possível gerar uma carteira otimizada para o perfil {perfil}. Tente novamente com mais ETFs."
+    
     alocacao_list = list(carteira.values())
+    
+    # Garantir que temos pelo menos dois ETFs para mostrar
+    etfs_texto = etfs_list[0]
+    if len(etfs_list) > 1:
+        etfs_texto = f"{etfs_list[0]} ({alocacao_list[0]}%) e {etfs_list[1]} ({alocacao_list[1]}%)"
     
     if perfil == "Conservador":
         return f"""Esta carteira otimizada de {len(etfs_list)} ETFs está alinhada com seu perfil conservador, priorizando a preservação de capital e estabilidade. 
         
-A diversificação entre {', '.join(etfs_list[:3])} e outros ETFs ajuda a reduzir a volatilidade e proporcionar um crescimento consistente ao longo do tempo.
+A diversificação entre {', '.join(etfs_list[:min(3, len(etfs_list))])} e outros ETFs ajuda a reduzir a volatilidade e proporcionar um crescimento consistente ao longo do tempo.
 
-A alocação está balanceada para minimizar o risco, com maior peso em {etfs_list[0]} ({alocacao_list[0]}%) e {etfs_list[1]} ({alocacao_list[1]}%), que historicamente apresentam menor volatilidade.
+A alocação está balanceada para minimizar o risco, com maior peso em {etfs_texto}, que historicamente apresentam menor volatilidade.
 
 Recomenda-se revisão semestral da carteira para pequenos ajustes conforme as condições de mercado."""
     
     elif perfil == "Moderado":
         return f"""Esta carteira de {len(etfs_list)} ETFs foi otimizada para seu perfil moderado, buscando um equilíbrio entre crescimento e proteção patrimonial.
         
-Com maior alocação em {etfs_list[0]} ({alocacao_list[0]}%) e {etfs_list[1]} ({alocacao_list[1]}%), a carteira combina instrumentos de maior potencial de valorização com outros mais estáveis.
+Com maior alocação em {etfs_texto}, a carteira combina instrumentos de maior potencial de valorização com outros mais estáveis.
 
 A diversificação entre diferentes classes de ativos proporciona uma exposição balanceada ao mercado, adequada para um horizonte de investimento de médio prazo.
 
@@ -516,148 +567,210 @@ Recomenda-se revisão trimestral da carteira para ajustes que mantenham o alinha
     else:  # Agressivo
         return f"""Esta carteira de {len(etfs_list)} ETFs está alinhada com seu perfil agressivo, focando em maximizar retornos com maior tolerância à volatilidade.
         
-A alocação dá preferência a {etfs_list[0]} ({alocacao_list[0]}%) e {etfs_list[1]} ({alocacao_list[1]}%), ETFs com maior potencial de valorização, complementados por outros instrumentos para diversificação estratégica.
+A alocação dá preferência a {etfs_texto}, ETFs com maior potencial de valorização, complementados por outros instrumentos para diversificação estratégica.
 
 Esta composição busca capturar oportunidades de crescimento significativo no longo prazo, aceitando oscilações de mercado no curto e médio prazo.
 
 Recomenda-se revisão mensal ou bimestral da carteira para potencialmente aumentar a exposição em segmentos com momentum favorável."""
 
-# Função para gerar relatório PDF
+# Modificar a função gerar_pdf para incluir tratamento de erros
 def gerar_pdf(df_aloc, analise_texto, perfil, universo, performance):
-    # Importações necessárias para o ReportLab
-    from reportlab.lib import colors
-    from reportlab.lib.pagesizes import A4
-    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    from reportlab.lib.units import mm, cm
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image
-    from reportlab.lib.enums import TA_CENTER, TA_LEFT
-    import io
-    from datetime import datetime
-    
-    # Criar um buffer para o PDF
-    buffer = io.BytesIO()
-    
-    # Configurações de página
-    doc = SimpleDocTemplate(
-        buffer, 
-        pagesize=A4,
-        leftMargin=1.5*cm,
-        rightMargin=1.5*cm,
-        topMargin=2*cm,
-        bottomMargin=2*cm
-    )
-    
-    # Lista para armazenar os elementos do documento
-    story = []
-    
-    # Estilos de texto
-    styles = getSampleStyleSheet()
-    title_style = ParagraphStyle(
-        'TitleStyle',
-        parent=styles['Title'],
-        fontSize=16,
-        alignment=TA_CENTER,
-        spaceAfter=6*mm
-    )
-    
-    subtitle_style = ParagraphStyle(
-        'SubtitleStyle',
-        parent=styles['Heading2'],
-        fontSize=14,
-        alignment=TA_CENTER,
-        spaceAfter=6*mm
-    )
-    
-    header_style = ParagraphStyle(
-        'HeaderStyle',
-        parent=styles['Heading3'],
-        fontSize=12,
-        alignment=TA_LEFT,
-        spaceAfter=3*mm
-    )
-    
-    normal_style = ParagraphStyle(
-        'NormalStyle',
-        parent=styles['Normal'],
-        fontSize=10,
-        spaceBefore=1*mm,
-        spaceAfter=3*mm
-    )
-    
-    # Cabeçalho do documento
-    story.append(Paragraph("ETF Blueprint - Relatório de Carteira", title_style))
-    story.append(Paragraph(f"Gerado em: {datetime.now().strftime('%d/%m/%Y %H:%M')}", normal_style))
-    story.append(Spacer(1, 5*mm))
-    
-    # Perfil do investidor
-    story.append(Paragraph("Perfil do Investidor", header_style))
-    story.append(Paragraph(f"Perfil: <b>{perfil}</b>", normal_style))
-    story.append(Paragraph(f"Universo de ETFs: <b>{universo}</b>", normal_style))
-    story.append(Spacer(1, 5*mm))
-    
-    # Carteira otimizada
-    story.append(Paragraph("Carteira Otimizada", header_style))
-    
-    # Dados para a tabela
-    table_data = [["ETF", "Alocação (%)"]]
-    for index, row in df_aloc.iterrows():
-        table_data.append([row['ETF'], f"{row['Alocação (%)']:.2f}%"])
-    
-    # Estilo da tabela
-    table_style = TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.black),
-        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-        ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
-        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-        ('GRID', (0, 0), (-1, -1), 1, colors.black),
-        ('BOX', (0, 0), (-1, -1), 1, colors.black),
-    ])
-    
-    # Criar tabela
-    etf_table = Table(table_data, colWidths=[doc.width*0.6, doc.width*0.3])
-    etf_table.setStyle(table_style)
-    story.append(etf_table)
-    story.append(Spacer(1, 5*mm))
-    
-    # Performance esperada
-    expected_return, volatility, sharpe = performance
-    story.append(Paragraph("Performance Esperada", header_style))
-    
-    # Dados para a tabela de performance
-    perf_data = [
-        ["Retorno Anual Esperado:", f"{expected_return*100:.2f}%"],
-        ["Volatilidade Anual:", f"{volatility*100:.2f}%"],
-        ["Índice Sharpe:", f"{sharpe:.2f}"]
-    ]
-    
-    # Criar tabela de performance
-    perf_table = Table(perf_data, colWidths=[doc.width*0.6, doc.width*0.3])
-    perf_table.setStyle(TableStyle([
-        ('ALIGN', (0, 0), (0, -1), 'LEFT'),
-        ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
-        ('GRID', (0, 0), (-1, -1), 1, colors.lightgrey),
-        ('BOX', (0, 0), (-1, -1), 1, colors.lightgrey),
-    ]))
-    story.append(perf_table)
-    story.append(Spacer(1, 10*mm))
-    
-    # Análise da carteira
-    story.append(Paragraph("Análise da Carteira", header_style))
-    story.append(Paragraph(analise_texto, normal_style))
-    
-    # Rodapé
-    story.append(Spacer(1, 10*mm))
-    story.append(Paragraph(f"© {datetime.now().year} ETF Blueprint - Todos os direitos reservados", 
-                          ParagraphStyle('Footer', parent=styles['Normal'], alignment=TA_CENTER, fontSize=8)))
-    
-    # Gerar PDF
-    doc.build(story)
-    
-    # Retornar o conteúdo do buffer
-    buffer.seek(0)
-    return buffer.getvalue()
+    """
+    Gera um relatório PDF com análise da carteira otimizada.
+    Inclui tratamento de erros para garantir que a geração do PDF não falhe.
+    """
+    try:
+        # Importações necessárias para o ReportLab
+        from reportlab.lib import colors
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.units import mm, cm
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image
+        from reportlab.lib.enums import TA_CENTER, TA_LEFT
+        import io
+        from datetime import datetime
+        
+        # Criar um buffer para o PDF
+        buffer = io.BytesIO()
+        
+        # Configurações de página
+        doc = SimpleDocTemplate(
+            buffer, 
+            pagesize=A4,
+            leftMargin=1.5*cm,
+            rightMargin=1.5*cm,
+            topMargin=2*cm,
+            bottomMargin=2*cm
+        )
+        
+        # Lista para armazenar os elementos do documento
+        story = []
+        
+        # Estilos de texto
+        styles = getSampleStyleSheet()
+        title_style = ParagraphStyle(
+            'TitleStyle',
+            parent=styles['Title'],
+            fontSize=16,
+            alignment=TA_CENTER,
+            spaceAfter=6*mm
+        )
+        
+        subtitle_style = ParagraphStyle(
+            'SubtitleStyle',
+            parent=styles['Heading2'],
+            fontSize=14,
+            alignment=TA_CENTER,
+            spaceAfter=6*mm
+        )
+        
+        header_style = ParagraphStyle(
+            'HeaderStyle',
+            parent=styles['Heading3'],
+            fontSize=12,
+            alignment=TA_LEFT,
+            spaceAfter=3*mm
+        )
+        
+        normal_style = ParagraphStyle(
+            'NormalStyle',
+            parent=styles['Normal'],
+            fontSize=10,
+            spaceBefore=1*mm,
+            spaceAfter=3*mm
+        )
+        
+        # Cabeçalho do documento
+        story.append(Paragraph("ETF Blueprint - Relatório de Carteira", title_style))
+        story.append(Paragraph(f"Gerado em: {datetime.now().strftime('%d/%m/%Y %H:%M')}", normal_style))
+        story.append(Spacer(1, 5*mm))
+        
+        # Perfil do investidor
+        story.append(Paragraph("Perfil do Investidor", header_style))
+        story.append(Paragraph(f"Perfil: <b>{perfil}</b>", normal_style))
+        story.append(Paragraph(f"Universo de ETFs: <b>{universo}</b>", normal_style))
+        story.append(Spacer(1, 5*mm))
+        
+        # Carteira otimizada
+        story.append(Paragraph("Carteira Otimizada", header_style))
+        
+        # Garantir que o DataFrame não está vazio
+        if not df_aloc.empty:
+            # Dados para a tabela
+            table_data = [["ETF", "Alocação (%)"]]
+            for index, row in df_aloc.iterrows():
+                try:
+                    # Garantir que os valores são numéricos
+                    alocacao = float(row['Alocação (%)'])
+                    table_data.append([row['ETF'], f"{alocacao:.2f}%"])
+                except (ValueError, TypeError):
+                    # Em caso de erro, usar o valor como está
+                    table_data.append([row['ETF'], str(row['Alocação (%)']) + "%"])
+            
+            # Estilo da tabela
+            table_style = TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.black),
+                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                ('GRID', (0, 0), (-1, -1), 1, colors.black),
+                ('BOX', (0, 0), (-1, -1), 1, colors.black),
+            ])
+            
+            # Criar tabela
+            etf_table = Table(table_data, colWidths=[doc.width*0.6, doc.width*0.3])
+            etf_table.setStyle(table_style)
+            story.append(etf_table)
+        else:
+            # Mensagem caso a tabela esteja vazia
+            story.append(Paragraph("Nenhum ETF na carteira otimizada.", normal_style))
+        
+        story.append(Spacer(1, 5*mm))
+        
+        # Performance esperada
+        expected_return, volatility, sharpe = performance
+        story.append(Paragraph("Performance Esperada", header_style))
+        
+        # Garantir que os valores são numéricos
+        try:
+            expected_return = float(expected_return)
+            volatility = float(volatility)
+            sharpe = float(sharpe)
+        except (ValueError, TypeError):
+            # Valores padrão em caso de erro
+            expected_return = 0.0
+            volatility = 0.0
+            sharpe = 0.0
+        
+        # Dados para a tabela de performance
+        perf_data = [
+            ["Retorno Anual Esperado:", f"{expected_return*100:.2f}%"],
+            ["Volatilidade Anual:", f"{volatility*100:.2f}%"],
+            ["Índice Sharpe:", f"{sharpe:.2f}"]
+        ]
+        
+        # Criar tabela de performance
+        perf_table = Table(perf_data, colWidths=[doc.width*0.6, doc.width*0.3])
+        perf_table.setStyle(TableStyle([
+            ('ALIGN', (0, 0), (0, -1), 'LEFT'),
+            ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+            ('GRID', (0, 0), (-1, -1), 1, colors.lightgrey),
+            ('BOX', (0, 0), (-1, -1), 1, colors.lightgrey),
+        ]))
+        story.append(perf_table)
+        story.append(Spacer(1, 10*mm))
+        
+        # Análise da carteira
+        story.append(Paragraph("Análise da Carteira", header_style))
+        
+        # Garantir que a análise não está vazia
+        if analise_texto:
+            # Substituir caracteres que podem causar erros no PDF
+            analise_texto = analise_texto.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+            story.append(Paragraph(analise_texto, normal_style))
+        else:
+            story.append(Paragraph("Análise não disponível.", normal_style))
+        
+        # Rodapé
+        story.append(Spacer(1, 10*mm))
+        story.append(Paragraph(f"© {datetime.now().year} ETF Blueprint - Todos os direitos reservados", 
+                              ParagraphStyle('Footer', parent=styles['Normal'], alignment=TA_CENTER, fontSize=8)))
+        
+        # Gerar PDF
+        doc.build(story)
+        
+        # Retornar o conteúdo do buffer
+        buffer.seek(0)
+        return buffer.getvalue()
+    except Exception as e:
+        # Em caso de erro, retornar uma mensagem de erro em um PDF simples
+        try:
+            # Tentar criar um PDF simples com a mensagem de erro
+            from reportlab.lib.pagesizes import A4
+            from reportlab.lib.styles import getSampleStyleSheet
+            from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+            import io
+            
+            buffer = io.BytesIO()
+            doc = SimpleDocTemplate(buffer, pagesize=A4)
+            
+            styles = getSampleStyleSheet()
+            story = []
+            
+            story.append(Paragraph("ETF Blueprint - Erro ao Gerar Relatório", styles['Title']))
+            story.append(Spacer(1, 20))
+            story.append(Paragraph(f"Ocorreu um erro ao gerar o PDF: {str(e)}", styles['Normal']))
+            story.append(Spacer(1, 10))
+            story.append(Paragraph("Por favor, tente novamente mais tarde ou entre em contato com o suporte.", styles['Normal']))
+            
+            doc.build(story)
+            buffer.seek(0)
+            return buffer.getvalue()
+        except Exception:
+            # Se tudo falhar, retornar um PDF vazio
+            return io.BytesIO().getvalue()
 
 # Código principal do aplicativo (substitua a seção existente após as funções)
 if __name__ == "__main__":
@@ -953,10 +1066,10 @@ if __name__ == "__main__":
             plot_data = df_aloc.copy()
             
             # Garantir que os dados são do tipo correto
-            plot_data['Alocação (%)'] = plot_data['Alocação (%)'].astype(float)
-            
-            # Criar o gráfico usando uma abordagem mais direta
             try:
+                plot_data['Alocação (%)'] = plot_data['Alocação (%)'].astype(float)
+                
+                # Criar o gráfico usando uma abordagem mais direta
                 fig = px.pie(
                     plot_data,
                     values="Alocação (%)",  # Nome exato da coluna
@@ -982,6 +1095,8 @@ if __name__ == "__main__":
                 st.plotly_chart(fig, use_container_width=True)
             except Exception as e:
                 st.error(f"Erro ao gerar gráfico de pizza: {e}")
+                # Mostrar a tabela como alternativa
+                st.dataframe(plot_data, use_container_width=True)
         
         # Botão para retornar
         if st.button("← Voltar para Entrada", key="back-btn"):
