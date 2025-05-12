@@ -17,7 +17,11 @@ import cvxpy as cp
 import scipy.stats
 
 # Verificar se CVXPY está disponível
-CVXPY_AVAILABLE = True  # Uma vez que importamos cvxpy acima, ele está disponível
+try:
+    import cvxpy as cp
+    CVXPY_AVAILABLE = True
+except ImportError:
+    CVXPY_AVAILABLE = False
 
 # Configuração Inicial
 st.set_page_config(
@@ -39,12 +43,30 @@ st.markdown(hide_menu_style, unsafe_allow_html=True)
 # Carregar variáveis de ambiente
 load_dotenv()
 
-# Chaves API
-FMP_API_KEY = os.getenv("FMP_API_KEY", st.secrets.get("FMP_API_KEY", ""))
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", st.secrets.get("OPENAI_API_KEY", ""))
+# Função segura para acessar secrets e env vars
+def get_api_key(key_name, default=""):
+    """Busca chave de API com fallback seguro."""
+    try:
+        # Tentar pegar do secrets primeiro
+        from_secrets = st.secrets.get("api_keys", {}).get(key_name, "")
+        if from_secrets:
+            return from_secrets
+    except Exception:
+        pass  # Ignora erros e continua
+    
+    # Fallback para variáveis de ambiente
+    return os.getenv(key_name, default)
 
-# Configurar OpenAI
-openai.api_key = OPENAI_API_KEY
+# Chaves API com acesso seguro
+FMP_API_KEY = get_api_key("FMP_API_KEY")
+OPENAI_API_KEY = get_api_key("OPENAI_API_KEY")
+
+# Configurar OpenAI apenas se a chave estiver disponível
+if OPENAI_API_KEY:
+    try:
+        openai.api_key = OPENAI_API_KEY
+    except Exception:
+        pass  # Ignora erros na configuração da API
 
 # Definir listas de ETFs
 ETFS_BR = [
@@ -78,7 +100,7 @@ def get_prices(tickers, start_date=None, end_date=None):
     Retorna um DataFrame com os preços.
     """
     # Verificar se a API KEY da FMP está disponível
-    fmp_api_key = st.secrets.get("api_keys", {}).get("FMP_API_KEY", "")
+    fmp_api_key = get_api_key("FMP_API_KEY")
     
     # Se não tiver API KEY ou estiver vazia, usar dados simulados
     if not fmp_api_key:
@@ -90,7 +112,7 @@ def get_prices(tickers, start_date=None, end_date=None):
         for ticker in tickers:
             try:
                 url = f"https://financialmodelingprep.com/api/v3/historical-price-full/{ticker}?apikey={fmp_api_key}"
-                response = requests.get(url)
+                response = requests.get(url, timeout=10)  # Adicionar timeout
                 data = response.json()
                 
                 if 'historical' not in data:
@@ -124,7 +146,7 @@ def generate_simulated_prices(tickers, days=252*2):
     np.random.seed(42)  # Para reprodutibilidade
     
     # Criar datas para os últimos 2 anos (aproximadamente 252 dias úteis por ano)
-    end_date = datetime.datetime.now()
+    end_date = datetime.now()  # Corrigido: usar datetime.now() ao invés de datetime.datetime.now()
     dates = [end_date - datetime.timedelta(days=i) for i in range(days)]
     dates.reverse()
     
@@ -159,8 +181,9 @@ def estimar_retornos_cov(prices_df):
     
     return mu, S
 
-# Função para otimizar a carteira modificada para usar dados simulados se necessário
+# Função para otimizar a carteira com melhor tratamento de erros
 def otimizar(tickers, perfil, prices_df=None):
+    """Otimiza uma carteira de ETFs conforme o perfil de risco."""
     if prices_df is None or prices_df.empty:
         prices_df = get_prices(tickers)
     
@@ -184,10 +207,13 @@ def otimizar(tickers, perfil, prices_df=None):
         returns = prices_df.pct_change().dropna()
         
         # Aplicar winsorization para remover outliers extremos
-        # Isso ajuda a melhorar a estabilidade do modelo
         winsor_returns = returns.copy()
         for col in winsor_returns.columns:
-            winsor_returns[col] = scipy.stats.mstats.winsorize(winsor_returns[col], limits=[0.01, 0.01])
+            try:
+                winsor_returns[col] = scipy.stats.mstats.winsorize(winsor_returns[col], limits=[0.01, 0.01])
+            except Exception:
+                # Se falhar, manter os valores originais
+                pass
         
         # Calcular retornos esperados e matriz de covariância
         expected_returns = winsor_returns.mean() * 252  # Anualizado
@@ -251,9 +277,9 @@ def otimizar(tickers, perfil, prices_df=None):
                         allocation[ticker] = round(optimal_weights[i] * 100, 2)
                 
                 # Calcular métricas do portfólio otimizado
-                portfolio_return = (expected_returns @ optimal_weights)
-                portfolio_risk = np.sqrt(optimal_weights @ cov_matrix @ optimal_weights)
-                portfolio_sharpe = portfolio_return / portfolio_risk
+                portfolio_return = float(expected_returns @ optimal_weights)
+                portfolio_risk = float(np.sqrt(optimal_weights @ cov_matrix @ optimal_weights))
+                portfolio_sharpe = float(portfolio_return / portfolio_risk if portfolio_risk > 0 else 0)
                 
                 return allocation, (portfolio_return, portfolio_risk, portfolio_sharpe)
             else:
@@ -331,8 +357,17 @@ def _otimizar_alternativo(prices_df, perfil):
 
 # Adicionar função para calcular fronteira eficiente (após a função _otimizar_alternativo)
 def calcular_fronteira_eficiente(prices_df, n_portfolios=50):
+    """Calcula a fronteira eficiente com tratamento de erros e tipos melhorado."""
+    # Verificar se temos dados suficientes
+    if prices_df.shape[1] < 2:
+        raise ValueError("São necessários pelo menos 2 ativos para calcular a fronteira eficiente")
+    
     # Calcular retornos diários
     returns = prices_df.pct_change().dropna()
+    
+    # Verificar se temos dias suficientes
+    if returns.shape[0] < 20:
+        raise ValueError("São necessários pelo menos 20 dias de dados para calcular a fronteira eficiente")
     
     # Número de ativos
     n_assets = returns.shape[1]
@@ -364,6 +399,8 @@ def calcular_fronteira_eficiente(prices_df, n_portfolios=50):
         
         # Restringir aos limites (4%-20%)
         weights = np.clip(weights, 0.04, 0.20)
+        
+        # Garantir que a soma seja 1
         weights = weights / np.sum(weights)
         
         # Garantir que o número de ativos com peso >= 4% não exceda o número total de ativos
@@ -386,7 +423,7 @@ def calcular_fronteira_eficiente(prices_df, n_portfolios=50):
         vol_arr[i] = np.sqrt(np.dot(weights.T, np.dot(cov_matrix, weights)))
         
         # Calcular Sharpe ratio
-        sharpe_arr[i] = (ret_arr[i] - risk_free) / vol_arr[i]
+        sharpe_arr[i] = (ret_arr[i] - risk_free) / vol_arr[i] if vol_arr[i] > 0 else 0
     
     # Combinar resultados
     frontier_data = {
@@ -397,19 +434,20 @@ def calcular_fronteira_eficiente(prices_df, n_portfolios=50):
     
     return pd.DataFrame(frontier_data)
 
-# Modificar a função gerar_texto para usar modelos GPT mais baratos e robustos
+# Modificar a função gerar_texto para ser mais robusta
 def gerar_texto(carteira, perfil):
+    """Gera análise textual da carteira usando OpenAI API com melhor tratamento de erros."""
     prompt = f"""
     Você é analista financeiro. Explique esta carteira de ETFs {carteira}
     para um investidor {perfil}, em até 300 palavras, em português simples.
     Foque em explicar a diversificação e estratégia da carteira.
     """
     
+    # Se não temos API key, usar o texto demo
+    if not OPENAI_API_KEY:
+        return gerar_texto_demo(carteira, perfil)
+    
     try:
-        # Verificar se a API key está disponível
-        if not OPENAI_API_KEY:
-            return gerar_texto_demo(carteira, perfil)
-        
         # Tentar a nova API da OpenAI primeiro
         try:
             from openai import OpenAI
@@ -442,10 +480,10 @@ def gerar_texto(carteira, perfil):
                     temperature=0.3
                 )
                 return resp.choices[0].message.content.strip()
-            except Exception as e:
+            except Exception:
                 # Se falhar, usar o modo de demonstração
                 return gerar_texto_demo(carteira, perfil)
-    except Exception as e:
+    except Exception:
         # Se ocorrer qualquer erro, usar o modo de demonstração
         return gerar_texto_demo(carteira, perfil)
 
@@ -680,7 +718,7 @@ if __name__ == "__main__":
             
             if submitted:
                 # Verificar se temos API key da FMP
-                fmp_api_key = st.secrets.get("api_keys", {}).get("FMP_API_KEY", "")
+                fmp_api_key = get_api_key("FMP_API_KEY")
                 if not fmp_api_key:
                     # Usar dados simulados (modo demonstração)
                     st.session_state['demo_mode'] = True
@@ -914,30 +952,36 @@ if __name__ == "__main__":
             # Clonamos os dados para garantir que não haja problemas de referência
             plot_data = df_aloc.copy()
             
+            # Garantir que os dados são do tipo correto
+            plot_data['Alocação (%)'] = plot_data['Alocação (%)'].astype(float)
+            
             # Criar o gráfico usando uma abordagem mais direta
-            fig = px.pie(
-                plot_data,
-                values="Alocação (%)",  # Nome exato da coluna
-                names="ETF",
-                title='Composição da Carteira'
-            )
-            
-            # Configurações para melhorar a exibição
-            fig.update_traces(
-                textposition='inside',
-                textinfo='percent+label',
-                texttemplate="%{label}<br>%{percent:.1%}",
-                hovertemplate='<b>%{label}</b><br>Alocação: %{value:.2f}%<extra></extra>'
-            )
-            
-            # Ajustar layout
-            fig.update_layout(
-                showlegend=False,  # Sem legenda para ficar mais limpo
-                height=400,
-                margin=dict(t=40, b=0, l=0, r=0)
-            )
-            
-            st.plotly_chart(fig, use_container_width=True)
+            try:
+                fig = px.pie(
+                    plot_data,
+                    values="Alocação (%)",  # Nome exato da coluna
+                    names="ETF",
+                    title='Composição da Carteira'
+                )
+                
+                # Configurações para melhorar a exibição
+                fig.update_traces(
+                    textposition='inside',
+                    textinfo='percent+label',
+                    texttemplate="%{label}<br>%{percent:.1%}",
+                    hovertemplate='<b>%{label}</b><br>Alocação: %{value:.2f}%<extra></extra>'
+                )
+                
+                # Ajustar layout
+                fig.update_layout(
+                    showlegend=False,  # Sem legenda para ficar mais limpo
+                    height=400,
+                    margin=dict(t=40, b=0, l=0, r=0)
+                )
+                
+                st.plotly_chart(fig, use_container_width=True)
+            except Exception as e:
+                st.error(f"Erro ao gerar gráfico de pizza: {e}")
         
         # Botão para retornar
         if st.button("← Voltar para Entrada", key="back-btn"):
