@@ -1,96 +1,84 @@
 # ETF Blueprint 📈
 
-Uma aplicação para otimização de carteiras de ETFs personalizadas com base no perfil do investidor.
+Uma aplicação para otimização de carteiras de ETFs usando análise quantitativa e inteligência artificial.
 
 ## Sobre o Projeto
 
-ETF Blueprint é uma ferramenta que permite aos investidores criar carteiras de ETFs (Exchange Traded Funds) globais otimizadas em questão de minutos. A aplicação analisa dados históricos, perfil de risco e objetivos do investidor para recomendar a melhor alocação possível.
+O ETF Blueprint é uma ferramenta web que permite aos investidores construir carteiras otimizadas com ETFs do Brasil e dos EUA. O aplicativo utiliza algoritmos de otimização convexa (CVXPY) para criar carteiras eficientes com base no perfil de risco do investidor.
 
-## Funcionalidades
+### Principais Funcionalidades
 
-- 📊 Otimização de carteira baseada em retorno esperado, volatilidade e sharpe ratio
-- 🎯 Criação de carteira otimizada de exatos 10 ETFs com alocação entre 4% e 20% por ativo
-- 🧠 Análise personalizada com narrativa gerada por IA (OpenAI API)
-- 📈 Visualização com gráficos Plotly interativos
-- 📄 Geração de relatório PDF detalhado
-- 💼 Exportação dos dados em CSV para implementação em corretoras
-
-## Tecnologias
-
-- Python 3.9+
-- Streamlit (frontend)
-- Financial Modeling Prep API (dados financeiros)
-- PyPortfolioOpt (otimização de portfólios)
-- OpenAI API (geração de narrativas personalizadas)
-- Plotly (visualizações)
-- WeasyPrint (geração de PDF)
+- Otimização de carteira com base em 3 perfis: Conservador, Moderado e Agressivo
+- Universo de ETFs do Brasil, EUA ou ambos
+- Visualização da alocação recomendada com gráficos interativos
+- Análise textual da carteira gerada por IA
+- Exportação de resultados em CSV e PDF
 
 ## Requisitos
 
-- Python 3.9+
-- API Key da Financial Modeling Prep (FMP)
-- API Key da OpenAI
+- Python 3.9 (recomendado)
+- Bibliotecas Python listadas em `requirements.txt`
+- Chaves API:
+  - Financial Modeling Prep (FMP) API
+  - OpenAI API (opcional, para análise por IA)
 
-## Configuração
+## Instalação e Execução
 
-1. Clone o repositório:
-```bash
-git clone https://github.com/seu-usuario/etf-blueprint.git
-cd etf-blueprint
-```
+### Windows com WSL (Recomendado)
 
-2. Instale as dependências:
-```bash
-pip install -r requirements.txt
-```
+1. Certifique-se de ter o WSL instalado no Windows
+2. Clone este repositório
+3. Execute o arquivo `run_app_wsl.bat` com duplo clique
+   - Este script automaticamente criará um ambiente virtual Python 3.9
+   - Instalará todas as dependências necessárias
+   - Iniciará a aplicação Streamlit
 
-3. Configure as variáveis de ambiente:
+### Instalação Manual
 
-Crie um arquivo `.env` na raiz do projeto com as seguintes variáveis:
-```
-FMP_API_KEY=sua_chave_fmp_api
-OPENAI_API_KEY=sua_chave_openai_api
-```
+1. Clone este repositório
+2. Crie um ambiente virtual com Python 3.9:
+   ```
+   python3.9 -m venv venv39
+   source venv39/bin/activate  # Linux/macOS
+   venv39\Scripts\activate     # Windows
+   ```
+3. Instale as dependências:
+   ```
+   pip install -r requirements.txt
+   ```
+4. Configure as chaves API:
+   - Crie um arquivo `.env` com base no modelo `.env-modelo`
+   - Ou utilize o arquivo `.streamlit/secrets.toml`
 
-Alternativamente, no Streamlit Cloud, adicione essas chaves em Secrets.
+5. Execute a aplicação:
+   ```
+   streamlit run streamlit_app.py
+   ```
 
-## Execução Local
+## Deploy
 
-```bash
-streamlit run streamlit_app.py
-```
-
-## Deploy no Streamlit Cloud
-
-1. Faça fork deste repositório para sua conta GitHub
-2. Acesse [streamlit.io/cloud](https://streamlit.io/cloud) e faça login
-3. Clique em "New app" e selecione o repositório
-4. Configure as seguintes opções:
-   - Main file path: `streamlit_app.py`
-   - Python version: 3.9+
-5. Configure os Secrets com suas chaves de API:
-```toml
-FMP_API_KEY = "sua_chave_fmp_api"
-OPENAI_API_KEY = "sua_chave_openai_api"
-```
-6. Clique em "Deploy!"
+A aplicação está configurada para deploy no Streamlit Cloud. Os arquivos `runtime.txt` e `packages.txt` contêm as configurações necessárias para o ambiente de produção.
 
 ## Estrutura do Projeto
 
-- `streamlit_app.py`: Aplicativo principal em página única
-- `backend/services/`: Serviços para obtenção de dados, otimização e análise
-  - `fmp_service.py`: Cliente para API da Financial Modeling Prep
-  - `optimizer.py`: Lógica de otimização de carteiras
-  - `openai_service.py`: Cliente para API da OpenAI
-- `utils/`: Utilitários
-  - `pdf_report.py`: Geração de relatórios em PDF
-- `tests/`: Testes automatizados
-- `requirements.txt`: Dependências do projeto
+- `streamlit_app.py`: Arquivo principal da aplicação
 - `.streamlit/`: Configurações do Streamlit
+- `backend/`: Serviços e lógica de negócio
+- `utils/`: Funções utilitárias
+- `assets/`: Arquivos estáticos (imagens, etc.)
+- `tests/`: Testes automatizados
+
+## Solução de Problemas
+
+### Erro com CVXPY
+Se encontrar problemas com a instalação do CVXPY, a aplicação usará automaticamente uma implementação alternativa de otimização.
+
+### Python 3.12
+Evite usar Python 3.12, pois algumas dependências (especialmente CVXPY) podem não ser compatíveis.
 
 ## Licença
 
-Este projeto está licenciado sob a licença MIT - veja o arquivo LICENSE para detalhes.
+Este projeto é distribuído sob a licença MIT. Veja o arquivo `LICENSE` para mais detalhes.
 
 ## Contato
 
