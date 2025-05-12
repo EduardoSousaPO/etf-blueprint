@@ -5,7 +5,7 @@ cvxpy
 plotly
 openai
 requests
-weasyprint
+reportlab
 python-dotenv
 matplotlib
 scipy

@@ -359,92 +359,140 @@ def gerar_texto(carteira, perfil):
 
 # Função para gerar relatório PDF
 def gerar_pdf(df_aloc, analise_texto, perfil, universo, performance):
-    from weasyprint import HTML
-    import tempfile
+    # Importações necessárias para o ReportLab
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import mm, cm
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image
+    from reportlab.lib.enums import TA_CENTER, TA_LEFT
+    import io
+    from datetime import datetime
     
-    # Criar conteúdo HTML para o relatório
-    html_content = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="UTF-8">
-        <title>Relatório ETF Blueprint</title>
-        <style>
-            body {{ font-family: Arial, sans-serif; margin: 30px; }}
-            h1, h2 {{ color: #2C3E50; }}
-            .header {{ text-align: center; margin-bottom: 30px; }}
-            .date {{ font-size: 14px; color: #7F8C8D; margin-bottom: 20px; }}
-            table {{ width: 100%; border-collapse: collapse; margin: 20px 0; }}
-            th, td {{ border: 1px solid #BDC3C7; padding: 12px; text-align: left; }}
-            th {{ background-color: #F5F7FA; }}
-            .performance {{ margin: 20px 0; padding: 15px; background-color: #F8F9F9; border-radius: 5px; }}
-            .analysis {{ margin: 20px 0; text-align: justify; line-height: 1.6; }}
-            .footer {{ margin-top: 50px; font-size: 12px; color: #95A5A6; text-align: center; }}
-        </style>
-    </head>
-    <body>
-        <div class="header">
-            <h1>ETF Blueprint - Relatório de Carteira</h1>
-            <div class="date">Gerado em: {datetime.now().strftime('%d/%m/%Y %H:%M')}</div>
-        </div>
-        
-        <h2>Perfil do Investidor</h2>
-        <p>Perfil: <strong>{perfil}</strong></p>
-        <p>Universo de ETFs: <strong>{universo}</strong></p>
-        
-        <h2>Carteira Otimizada</h2>
-        <table>
-            <tr>
-                <th>ETF</th>
-                <th>Alocação (%)</th>
-            </tr>
-    """
+    # Criar um buffer para o PDF
+    buffer = io.BytesIO()
     
-    # Adicionar linhas da tabela
+    # Configurações de página
+    doc = SimpleDocTemplate(
+        buffer, 
+        pagesize=A4,
+        leftMargin=1.5*cm,
+        rightMargin=1.5*cm,
+        topMargin=2*cm,
+        bottomMargin=2*cm
+    )
+    
+    # Lista para armazenar os elementos do documento
+    story = []
+    
+    # Estilos de texto
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle(
+        'TitleStyle',
+        parent=styles['Title'],
+        fontSize=16,
+        alignment=TA_CENTER,
+        spaceAfter=6*mm
+    )
+    
+    subtitle_style = ParagraphStyle(
+        'SubtitleStyle',
+        parent=styles['Heading2'],
+        fontSize=14,
+        alignment=TA_CENTER,
+        spaceAfter=6*mm
+    )
+    
+    header_style = ParagraphStyle(
+        'HeaderStyle',
+        parent=styles['Heading3'],
+        fontSize=12,
+        alignment=TA_LEFT,
+        spaceAfter=3*mm
+    )
+    
+    normal_style = ParagraphStyle(
+        'NormalStyle',
+        parent=styles['Normal'],
+        fontSize=10,
+        spaceBefore=1*mm,
+        spaceAfter=3*mm
+    )
+    
+    # Cabeçalho do documento
+    story.append(Paragraph("ETF Blueprint - Relatório de Carteira", title_style))
+    story.append(Paragraph(f"Gerado em: {datetime.now().strftime('%d/%m/%Y %H:%M')}", normal_style))
+    story.append(Spacer(1, 5*mm))
+    
+    # Perfil do investidor
+    story.append(Paragraph("Perfil do Investidor", header_style))
+    story.append(Paragraph(f"Perfil: <b>{perfil}</b>", normal_style))
+    story.append(Paragraph(f"Universo de ETFs: <b>{universo}</b>", normal_style))
+    story.append(Spacer(1, 5*mm))
+    
+    # Carteira otimizada
+    story.append(Paragraph("Carteira Otimizada", header_style))
+    
+    # Dados para a tabela
+    table_data = [["ETF", "Alocação (%)"]]
     for index, row in df_aloc.iterrows():
-        html_content += f"""
-            <tr>
-                <td>{row['ETF']}</td>
-                <td>{row['Alocação (%)']:.2f}%</td>
-            </tr>
-        """
+        table_data.append([row['ETF'], f"{row['Alocação (%)']:.2f}%"])
     
-    # Adicionar resultados de performance
+    # Estilo da tabela
+    table_style = TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.black),
+        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+        ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+        ('GRID', (0, 0), (-1, -1), 1, colors.black),
+        ('BOX', (0, 0), (-1, -1), 1, colors.black),
+    ])
+    
+    # Criar tabela
+    etf_table = Table(table_data, colWidths=[doc.width*0.6, doc.width*0.3])
+    etf_table.setStyle(table_style)
+    story.append(etf_table)
+    story.append(Spacer(1, 5*mm))
+    
+    # Performance esperada
     expected_return, volatility, sharpe = performance
-    html_content += f"""
-        </table>
-        
-        <div class="performance">
-            <h2>Performance Esperada</h2>
-            <p>Retorno Anual Esperado: <strong>{expected_return*100:.2f}%</strong></p>
-            <p>Volatilidade Anual: <strong>{volatility*100:.2f}%</strong></p>
-            <p>Índice Sharpe: <strong>{sharpe:.2f}</strong></p>
-        </div>
-        
-        <div class="analysis">
-            <h2>Análise da Carteira</h2>
-            <p>{analise_texto}</p>
-        </div>
-        
-        <div class="footer">
-            <p>© {datetime.now().year} ETF Blueprint - Todos os direitos reservados</p>
-        </div>
-    </body>
-    </html>
-    """
+    story.append(Paragraph("Performance Esperada", header_style))
     
-    # Usar temporário para criar o PDF
-    with tempfile.NamedTemporaryFile(suffix='.html', delete=False) as f:
-        f.write(html_content.encode('utf-8'))
-        temp_path = f.name
+    # Dados para a tabela de performance
+    perf_data = [
+        ["Retorno Anual Esperado:", f"{expected_return*100:.2f}%"],
+        ["Volatilidade Anual:", f"{volatility*100:.2f}%"],
+        ["Índice Sharpe:", f"{sharpe:.2f}"]
+    ]
     
-    # Converter HTML para PDF
-    pdf_bytes = HTML(filename=temp_path).write_pdf()
+    # Criar tabela de performance
+    perf_table = Table(perf_data, colWidths=[doc.width*0.6, doc.width*0.3])
+    perf_table.setStyle(TableStyle([
+        ('ALIGN', (0, 0), (0, -1), 'LEFT'),
+        ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+        ('GRID', (0, 0), (-1, -1), 1, colors.lightgrey),
+        ('BOX', (0, 0), (-1, -1), 1, colors.lightgrey),
+    ]))
+    story.append(perf_table)
+    story.append(Spacer(1, 10*mm))
     
-    # Remover arquivo temporário
-    os.unlink(temp_path)
+    # Análise da carteira
+    story.append(Paragraph("Análise da Carteira", header_style))
+    story.append(Paragraph(analise_texto, normal_style))
     
-    return pdf_bytes
+    # Rodapé
+    story.append(Spacer(1, 10*mm))
+    story.append(Paragraph(f"© {datetime.now().year} ETF Blueprint - Todos os direitos reservados", 
+                          ParagraphStyle('Footer', parent=styles['Normal'], alignment=TA_CENTER, fontSize=8)))
+    
+    # Gerar PDF
+    doc.build(story)
+    
+    # Retornar o conteúdo do buffer
+    buffer.seek(0)
+    return buffer.getvalue()
 
 # Inicializar session_state
 if 'stage' not in st.session_state:
